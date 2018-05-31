@@ -23,6 +23,8 @@ Here's what the library offers now:
 
 ## Installation and use
 
-This is a library for Racket. To install it, run `raco pkg install --deps search-auto` from the `lathe-ordinals-lib/` directory. Then you can put an import like `(require lathe-ordinals)` in your Racket program.
+This is a library for Racket. To install it from the Racket package index, run `raco pkg install lathe-ordinals`. Then you can put an import like `(require lathe-comforts)` in your Racket program.
 
-This library is pretty unstable at the moment. It has little documentation, and it has no entry in the Racket package index.
+To install it from source, run `raco pkg install --deps search-auto` from the `lathe-ordinals-lib/` directory.
+
+[Documentation for Lathe Ordinals for Racket](http://docs.racket-lang.org/lathe-ordinals/index.html) is available at the Racket documentation website, and it's maintained in the `lathe-comforts-doc/` directory.
