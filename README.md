@@ -16,13 +16,13 @@ That's a lot of talk about set theory and mathematical foundations, but this lib
 
 Here's what the library offers now:
 
-* A data structure (`onum?`) to represent the ordinal numbers of ZFC set theory that are less than epsilon zero. This is the earliest set of ordinals that contains `omega` and has full support for ordinal addition, multiplication, and exponentiation.
+* Data structures to represent the ordinal numbers of ZFC set theory that are less than or equal to epsilon zero (`onum<=e0?`). The ordinals less than epsilon zero (`onum<e0?`) are the earliest set of ordinals that contains omega and has full support for ordinal addition, multiplication, and exponentiation.
 
-* A corresponding data structure (`olist?`) to implement lazy lists of length up to and _including_ epsilon zero. Most of what you can do with these, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
+* A corresponding data structure (`olist<=e0?`) to implement lazy lists of length less than or equal to epsilon zero. Most of what you can do with these, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
 
 
 ## Installation and use
 
 This is a library for Racket. To install it, run `raco pkg install --deps search-auto` from the `lathe-ordinals-lib/` directory. Then you can put an import like `(require lathe-ordinals)` in your Racket program.
 
-This library is pretty unstable at the moment, with no documentation and no entry in the Racket package index.
+This library is pretty unstable at the moment. It has little documentation, and it has no entry in the Racket package index.

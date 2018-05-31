@@ -21,30 +21,27 @@
 
 (require rackunit)
 
+(require lathe-ordinals)
 ;(require lathe-ordinals/olist)
-(require lathe-ordinals/onum)
 
 ; (We provide nothing from this module.)
 
 
 ; TODO: Write more unit tests.
 
-(check-equal? (onum? onum-zero) #t
-  "Test that `onum?` recognizes an actual onum")
+(check-equal? (onum<=e0? 0) #t
+  "Test that `onum<=e0?` recognizes zero")
 
 
 ; Tests corresponding to documentation examples
 
-(define omega-plus-four (onum-plus onum-omega (nat->onum 4)))
-(define square-of-that
-  (onum-times omega-plus-four omega-plus-four))
-(onum-base-omega-expansion omega-plus-four)
-(onum-base-omega-expansion square-of-that)
+(define omega-plus-four (onum-plus (onum-omega) 4))
+(define square-of-that (onum-times omega-plus-four omega-plus-four))
 
 (check-equal?
-  (onum-base-omega-expansion omega-plus-four)
-  (list (list onum-one 1) (list onum-zero 4)))
+  (onum->cnf omega-plus-four)
+  (list (list 1 1) (list 0 4)))
 
 (check-equal?
-  (onum-base-omega-expansion square-of-that)
-  (list (list (nat->onum 2) 1) (list onum-one 4) (list onum-zero 4)))
+  (onum->cnf square-of-that)
+  (list (list 2 1) (list 1 4) (list 0 4)))

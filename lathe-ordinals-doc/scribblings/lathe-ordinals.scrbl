@@ -21,18 +21,18 @@
 
 @(require #/for-label racket/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> any/c list/c listof or/c)
+  *list/c -> any/c flat-contract? list/c listof or/c)
 @(require #/for-label #/only-in racket/math natural?)
 
 @(require #/for-label #/only-in lathe-comforts/maybe maybe?)
 
+@(require #/for-label lathe-ordinals)
 @(require #/for-label lathe-ordinals/olist)
-@(require #/for-label lathe-ordinals/onum)
 
 @(require #/only-in scribble/example examples make-eval-factory)
 
 @(define example-eval
-  (make-eval-factory #/list 'racket/base 'lathe-ordinals/onum))
+  (make-eval-factory #/list 'racket/base 'lathe-ordinals))
 
 
 @title{Lathe Ordinals}
@@ -63,36 +63,50 @@ That's a lot of talk about set theory and mathematical foundations, but this lib
 
 @section[#:tag "onum"]{Ordinal numerals}
 
-@defmodule[lathe-ordinals/onum]
+@defmodule[lathe-ordinals]
 
-This module provides data structure to represent the ordinal numbers of ZFC set theory that are less than epsilon zero. This is the earliest set of ordinals that contains @tt{omega} and has full support for ordinal addition, multiplication, and exponentiation.
+This module provides data structures to represent the ordinal numbers of ZFC set theory that are less than or equal to epsilon zero. The ordinals less than epsilon zero are the earliest set of ordinals that contains omega and has full support for ordinal addition, multiplication, and exponentiation.
+
+All the ordinals of this library can be compared using `equal?`. Finite ordinals are represented using natural numbers (@racket[natural?]).
 
 
-@defproc[(onum? [v any/c]) boolean?]{
-  Returns whether the given value is an ordinal number constructed by this library.
+@defproc[(onum<=e0? [v any/c]) boolean?]{
+  Returns whether the given value is an ordinal number constructed by this library. All such ordinals are less than or equal to epsilon zero.
 }
 
-@defproc[(onum-base-omega-expansion [n onum?]) (listof (list/c onum? exact-positive-integer?))]{
-  Returns a list that of the powers and coefficients of the ordinal in Cantor normal form.
+@defproc[(onum<e0? [v any/c]) boolean?]{
+  Returns whether the given value is an ordinal number strictly less than epsilon zero. These are the ordinal numbers that most of the arithmetic operations of this library are restricted to.
+}
+
+@defproc[(onum->cnf [n onum<e0?]) (listof (list/c onum<e0? exact-positive-integer?))]{
+  Given an ordinal less than epsilon zero, returns a list of the powers and coefficients of the ordinal in Cantor normal form.
   
   @examples[
     #:eval (example-eval)
-    (define _omega-plus-four (onum-plus onum-omega (nat->onum 4)))
+    (define _omega-plus-four (onum-plus (onum-omega) 4))
     _omega-plus-four
-    (onum-base-omega-expansion _omega-plus-four)
+    (onum->cnf _omega-plus-four)
     (define _square-of-that
       (onum-times _omega-plus-four _omega-plus-four))
     _square-of-that
-    (onum-base-omega-expansion _square-of-that)
+    (onum->cnf _square-of-that)
   ]
 }
 
-@defproc[(onum-compare [a onum?] [b onum?]) (or/c '< '= '>)]{
+@defproc[(onum-compare [a onum<=e0?] [b onum<=e0?]) (or/c '< '= '>)]{
   Returns the symbol @racket['<] if the numbers are provided in ascending order, @racket['=] if they're equal, and @racket['>] if they're in descending order.
 }
 
-@defthing[onum-omega onum?]{
-  The ordinal number omega. Every ordinal less than omega corresponds to a natural number.
+@defproc[(onum</c [n onum<=e0?]) flat-contract?]{
+  Returns a flat contract that requires the input to be an ordinal number strictly less than @racket[n].
+}
+
+@defproc[(onum-omega) onum<e0?]{
+  Returns the ordinal number omega. Every ordinal less than omega is a natural number.
+}
+
+@defproc[(onum-e0) onum<=e0?]{
+  Returns the ordinal number epsilon zero, the first infinite ordinal that can't be arrived at by exponentiation, multiplication, and addition.
 }
 
 @defproc[(nat->onum [n natural?]) onum?]{
@@ -100,21 +114,21 @@ This module provides data structure to represent the ordinal numbers of ZFC set 
 }
 
 @defproc*[(
-  [(onum-plus-list [ns (listof onum?)]) onum?]
-  [(onum-plus [n onum?] ...) onum?]
+  [ (onum-plus-list [ns (or/c (list/c) (*list/c onum<e0? onum<=e0?))])
+    onum<=e0?]
+  [(onum-plus [a onum<e0?] ... [b onum<=e0?]) onum<=e0?]
 )]{
   Adds up the given ordered list of ordinal numbers.
 }
 
 @defproc*[(
-  [(onum-times-list [ns (listof onum?)]) onum?]
-  [(onum-times [n onum?] ...) onum?]
+  [
+    (onum-times-list
+      [ns (or/c (list/c) (*list/c onum<e0? onum<=e0?))])
+    onum<=e0?]
+  [(onum-times [a onum<e0?] ... [b onum<=e0?]) onum<=e0?]
 )]{
   Multiplies the given ordered list of ordinal numbers.
-}
-
-@defproc[(onumext? [v any/c]) boolean?]{
-  Returns whether the given value is a @racket[maybe?] of an @racket[onum?]. This is used for representing ordinals up to and including epsilon zero.
 }
 
 @; TODO: Document this module's other exports.
@@ -125,18 +139,27 @@ This module provides data structure to represent the ordinal numbers of ZFC set 
 
 @defmodule[lathe-ordinals/olist]
 
-This module provides a lazy list data structure that can have length up to and _including_ epsilon zero, the first ordinal @racket[onum?] can't represent. Most of what you can do with these lazy lists, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
+This module provides a lazy list data structure that can have length less than or equal to epsilon zero. Most of what you can do with these lazy lists, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
 
 
-@defproc[(olist? [v any/c]) boolean?]{
-  Returns whether the given value is an ordinal-indexed list constructed by this library.
+@defproc[(olist<=e0? [v any/c]) boolean?]{
+  Returns whether the given value is an ordinal-indexed list constructed by this library. Every such list has a length no greater than epsilon zero.
 }
 
-@defproc[(olist-zero) olist?]{
+@defproc[(olist<e0? [v any/c]) boolean?]{
+  Returns whether the given value is an ordinal-indexed list with length strictly less than epsilon zero.
+}
+
+@defproc[(olist-zero) olist<e0?]{
   Returns an empty ordinal-indexed list.
 }
 
-@defproc[(olist-build [len onumext?] [index->element (-> onum? any/c)]) olist?]{
+@defproc[
+  (olist-build
+    [len onum<=e0?]
+    [index->element (-> (onum</c len) any/c)])
+  olist<=e0?
+]{
   Returns an ordinal-indexed list of the given length, which computes each element by passing the element's index to the given procedure.
 }
 

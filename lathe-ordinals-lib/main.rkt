@@ -1,11 +1,10 @@
 #lang parendown racket/base
 
-; lathe-ordinals/onum
+; lathe-ordinals
 ;
-; Cantor normal form numerals (in base omega) for computing on ordinal
-; numbers less than epsilon zero. Epsilon zero is equal to omega
-; raised to epsilon zero, and it's the first ordinal number with this
-; property. Omega is the first infinite ordinal.
+; A representation of ordinal numbers, currently supporting the
+; ordinals up to epsilon zero (the first infinite ordinal which is a
+; fixed point of exponentiation).
 
 ;   Copyright 2018 The Lathe Authors
 ;
@@ -23,72 +22,89 @@
 
 
 (require #/only-in racket/contract/base
-  -> ->* any/c list/c listof or/c)
+  *list/c -> ->* any/c flat-contract? list/c listof or/c)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/math natural?)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
-(require #/only-in lathe-comforts/maybe
-  just maybe/c maybe-map nothing)
+(require #/only-in lathe-comforts/maybe just maybe/c nothing)
 (require #/only-in lathe-comforts/list
   list-each list-foldl list-foldr list-map nat->maybe)
 (require #/only-in lathe-comforts/struct struct-easy)
 
 ; TODO: Document all of these exports.
 (provide
-  (rename-out
-    [-onum? onum?]
-    [-onum-base-omega-expansion onum-base-omega-expansion]
-  )
-  onum-compare onum<? onum>? onum<=? onum>=?
-  onum-zero onum-one onum-omega nat->onum onum->maybe-nat onum-plus1
+  onum<=e0? onum<e0?
+  
+  ; TODO: Decide whether to provide these. Maybe provide this
+  ; functionality in another way, like a logarithm operation.
+  ;
+  ; cnf->onum
+  onum->cnf
+  
+  onum-compare onum<? onum>? onum<=? onum>=? onum</c onum<=/c
+  onum-omega (rename-out [-onum-e0 onum-e0])
+  onum-plus1
   onum-plus-list onum-plus
   onum-drop1
   onum-drop
   onum-times-list onum-times
   onum-untimes
   onum-pow-list onum-pow
-  
-  onumext?
-  onumext-compare onumext<? onumext>? onumext<=? onumext>=?
-  onumext-plus1 onumext-plus
-  onumext-drop1 onumext-drop
 )
 
 
 
-(struct-easy (onum base-omega-expansion) #:equal
+; Epsilon zero, the first ordinal that can't be expressed in
+; Cantor normal form.
+(struct-easy (onum-e0) #:equal)
+
+; The ordinals greater than or equal to omega (the first infinite
+; ordinal) and less than epsilon zero, represented in Cantor normal
+; form.
+(struct-easy (onum-cnf base-omega-expansion) #:equal
   (#:guard-easy
     (unless (list? base-omega-expansion)
       (error "Expected base-omega-expansion to be a list"))
-    (list-each base-omega-expansion #/fn term
+    (mat base-omega-expansion (list)
+      (error "Expected base-omega-expansion to represent an infinite ordinal, not zero")
+    #/mat base-omega-expansion (list #/list 0 n)
+      (error "Expected base-omega-expansion to represent an infinite ordinal")
+    #/list-foldl (onum-e0) base-omega-expansion #/fn prev-power term
       (expect term (list power coefficient)
         (error "Expected each term to be a two-element list")
-      #/begin
-        (unless (onum? power)
-          (error "Expected each power to be an onum"))
-        (unless (exact-positive-integer? coefficient)
-          (error "Expected each coefficient to be an exact positive integer"))))
-    (list-foldl (nothing) base-omega-expansion #/fn prev-power term
-      (dissect term (list power coefficient)
-      #/expect prev-power (just prev-power) (just power)
-      #/expect (onum-compare prev-power power) '>
+      #/expect (onum<e0? power) #t
+        (error "Expected each power to be an ordinal less than epsilon zero")
+      #/expect (exact-positive-integer? coefficient) #t
+        (error "Expected each coefficient to be an exact positive integer")
+      #/expect (onum<? power prev-power) #t
         (error "Expected each power to be strictly less than the last")
-      #/just power))))
+        power))))
 
-; NOTE: This is just like `onum?` except for its interaction with
-; `struct-predicate-procedure?`.
-(define/contract (-onum? x)
+(define/contract (onum<=e0? x)
   (-> any/c boolean?)
-  (onum? x))
+  (or (onum<e0? x) (onum-e0? x)))
 
-; NOTE: This is just like `onum?` except for its interaction with
-; `struct-accessor-procedure?`.
-(define/contract (-onum-base-omega-expansion n)
-  (-> onum? #/listof #/list/c onum? exact-positive-integer?)
-  (dissect n (onum n)
-    n))
+(define/contract (onum<e0? x)
+  (-> any/c boolean?)
+  (or (natural? x) (onum-cnf? x)))
+
+(define/contract (onum->cnf n)
+  (-> onum<e0? #/listof #/list/c onum<e0? exact-positive-integer?)
+  (mat n 0 (list)
+  #/mat n (onum-cnf n) n
+  #/list #/list 0 n))
+
+(define/contract (cnf->onum base-omega-expansion)
+  (-> (listof #/list/c onum<e0? exact-positive-integer?) onum<e0?)
+  (mat base-omega-expansion (list) 0
+  #/mat base-omega-expansion (list #/list 0 n) n
+  ; TODO: See if we should check that the powers are strictly
+  ; decreasing here. We already do in the `onum-cnf` constructor
+  ; guard, but we'll probably want to do it here with a more tailored
+  ; error message if this is user-facing.
+  #/onum-cnf base-omega-expansion))
 
 ; TODO: Put this in Lathe Comforts.
 (define/contract (nat-compare a b)
@@ -98,9 +114,11 @@
     '>))
 
 (define/contract (onum-compare a b)
-  (-> onum? onum? #/or/c '< '= '>)
-  (dissect a (onum a)
-  #/dissect b (onum b)
+  (-> onum<=e0? onum<=e0? #/or/c '< '= '>)
+  (mat a (onum-e0) (mat b (onum-e0) '= '>)
+  #/mat b (onum-e0) '<
+  #/w- a (onum->cnf a)
+  #/w- b (onum->cnf b)
   #/w-loop next a a b b
     (expect a (cons a-first a-rest) (mat b (list) '= '<)
     #/expect b (cons b-first b-rest) '>
@@ -114,48 +132,48 @@
     #/next a-rest b-rest)))
 
 (define/contract (onum<? a b)
-  (-> onum? onum? boolean?)
+  (-> onum<=e0? onum<=e0? boolean?)
   (eq? '< #/onum-compare a b))
 
 (define/contract (onum>? a b)
-  (-> onum? onum? boolean?)
+  (-> onum<=e0? onum<=e0? boolean?)
   (eq? '> #/onum-compare a b))
 
 (define/contract (onum<=? a b)
-  (-> onum? onum? boolean?)
+  (-> onum<=e0? onum<=e0? boolean?)
   (not #/onum>? a b))
 
 (define/contract (onum>=? a b)
-  (-> onum? onum? boolean?)
+  (-> onum<=e0? onum<=e0? boolean?)
   (not #/onum<? a b))
 
-(define/contract onum-zero onum? (onum #/list))
-(define/contract onum-one onum? (onum #/list #/list onum-zero 1))
-(define/contract onum-omega onum? (onum #/list #/list onum-one 1))
+(define/contract (onum</c n)
+  (-> onum<=e0? flat-contract?)
+  ; TODO: Don't use a plain lambda like this for a contract.
+  (fn v #/and (onum<=e0? v) (onum<? v n)))
 
-(define/contract (nat->onum n)
-  (-> natural? onum?)
-  (mat n 0 onum-zero
-  #/onum #/list #/list onum-zero n))
+(define/contract (onum<=/c n)
+  (-> onum<=e0? flat-contract?)
+  ; TODO: Don't use a plain lambda like this for a contract.
+  (fn v #/and (onum<=e0? v) (onum<=? v n)))
 
-(define/contract (onum->maybe-nat n)
-  (-> onum #/maybe/c natural?)
-  (if (equal? onum-zero n) (just 0)
-  #/expect n (onum #/list #/list power n) (nothing)
-  #/if (equal? onum-zero power)
-    (just n)
-    (nothing)))
+(define/contract (onum-omega)
+  (-> onum<e0?)
+  (onum-cnf #/list #/list 1 1))
+
+; NOTE: This is just like `onum-e0` except for its interaction with
+; `struct-constructor-procedure?`.
+(define/contract (-onum-e0)
+  (-> onum<=e0?)
+  (onum-e0))
 
 ; This is increment by way of addition on the left. We're finding
-; `(onum-plus onum-one n)`.
+; `(onum-plus 1 n)`.
 (define/contract (onum-plus1 n)
-  (-> onum? onum?)
-  (dissect n (onum n)
-  #/expect (reverse n) (cons last rev-past) onum-one
-  #/dissect last (list power coefficient)
-  #/if (equal? onum-zero power)
-    (onum #/reverse #/cons (list power #/add1 coefficient) rev-past)
-    (onum #/reverse #/list* (list onum-zero 1) last rev-past)))
+  (-> onum<=e0? onum<=e0?)
+  (if (natural? n)
+    (+ 1 n)
+    n))
 
 ; TODO: Put this in Lathe Comforts.
 (define/contract (list-rev-onto source target)
@@ -164,61 +182,59 @@
   #/list-rev-onto rest #/cons first target))
 
 (define/contract (onum-plus-binary a b)
-  (-> onum? onum? onum?)
-  (dissect a (onum a-expansion)
-  #/dissect b (onum b-expansion)
+  (-> onum<e0? onum<=e0? onum<=e0?)
+  (mat b (onum-e0) (onum-e0)
+  #/w- b-expansion (onum->cnf b)
   #/expect b-expansion (cons b-first b-rest) a
   #/dissect b-first (list b-power b-coefficient)
+  #/w- a-expansion (onum->cnf a)
   #/w-loop next rev-a (reverse a-expansion)
     (expect rev-a (cons rev-a-first rev-a-rest) b
     #/dissect rev-a-first (list a-power a-coefficient)
     #/w- comparison (onum-compare a-power b-power)
     #/mat comparison '< (next rev-a-rest)
-    #/mat comparison '> (onum #/list-rev-onto rev-a b-expansion)
-    #/onum
+    #/mat comparison '> (cnf->onum #/list-rev-onto rev-a b-expansion)
+    #/cnf->onum
     #/list-rev-onto rev-a-rest
     #/cons (list b-power #/+ a-coefficient b-coefficient) b-rest)))
 
 (define/contract (onum-plus-list ns)
-  (-> (listof onum?) onum?)
-  (list-foldr ns onum-zero #/fn a b #/onum-plus-binary a b))
+  (-> (or/c (list/c) #/*list/c onum<e0? onum<=e0?) onum<=e0?)
+  (list-foldr ns 0 #/fn a b #/onum-plus-binary a b))
 
 (define/contract (onum-plus . ns)
-  (->* () #:rest (listof onum?) onum?)
+  (->* () #:rest (or/c (list/c) #/*list/c onum<e0? onum<=e0?)
+    onum<=e0?)
   (onum-plus-list ns))
 
 ; This is decrement by way of left subtraction. We're finding the
-; value `result` such that `(equal? (onum-plus onum-one result) n)`,
-; if it exists. It exists as long as `onum-one` is less than or equal
-; to `n`.
+; value `result` such that `(equal? (onum-plus 1 result) n)`,
+; if it exists. It exists as long as `n` is 1 or greater.
 (define/contract (onum-drop1 n)
-  (-> onum? #/maybe/c onum?)
-  (dissect n (onum n-expansion)
-  #/expect (reverse n-expansion) (cons last rev-past) (nothing)
-  #/dissect last (list power coefficient)
-  #/expect (equal? onum-zero power) #t (just n)
-  #/w- coefficient (sub1 coefficient)
-  #/just #/onum #/reverse
-  #/mat coefficient 0 rev-past
-  #/cons (list power coefficient) rev-past))
+  (-> onum<=e0? #/maybe/c onum<=e0?)
+  (if (natural? n)
+    (- n 1)
+    n))
 
 ; This is left subtraction. We're finding the value `result` such that
 ; `(equal? (onum-plus amount result) n)`, if it exists. It exists as
 ; long as `amount` is less than or equal to `n`.
 (define/contract (onum-drop amount n)
-  (-> onum? onum? #/maybe/c onum?)
-  (dissect amount (onum amount-expansion)
-  #/dissect n (onum n-expansion)
+  (-> onum<=e0? onum<=e0? #/maybe/c onum<=e0?)
+  (mat n (onum-e0) (just #/mat amount (onum-e0) 0 (onum-e0))
+  #/mat amount (onum-e0) (nothing)
+  #/w- amount-expansion (onum->cnf amount)
+  #/w- n-expansion (onum->cnf amount)
   #/w-loop next
     amount-expansion amount-expansion
     n-expansion n-expansion
     
     (expect n-expansion (cons n-first n-rest)
-      (mat amount-expansion (list) (just onum-zero)
+      (mat amount-expansion (list) (just 0)
       #/nothing)
     #/dissect n-first (list n-power n-coefficient)
     #/expect amount-expansion (cons amount-first amount-rest)
-      (just #/onum n-expansion)
+      (just #/cnf->onum n-expansion)
     #/dissect amount-first (list amount-power amount-coefficient)
     #/w- power-comparison (onum-compare amount-power n-power)
     #/mat power-comparison '> (nothing)
@@ -227,32 +243,34 @@
       (nat-compare amount-coefficient n-coefficient)
     #/mat coefficient-comparison '> (nothing)
     #/mat coefficient-comparison '= (next amount-rest n-rest)
-    #/onum
+    #/cnf->onum
     #/cons (list n-power #/- n-coefficient amount-coefficient)
       n-rest)))
 
 (define/contract (onum-times-binary a b)
-  (-> onum? onum? onum?)
-  (dissect a (onum a)
-  #/dissect b (onum b)
-  #/expect a (cons a-first a-rest) onum-zero
+  (-> onum<e0? onum<=e0? onum<=e0?)
+  (mat b (onum-e0) (onum-e0)
+  #/w- a (onum->cnf a)
+  #/w- b (onum->cnf b)
+  #/expect a (cons a-first a-rest) 0
   #/dissect a-first (list a-power a-coefficient)
   #/onum-plus-list
   #/list-map b #/dissectfn (list b-power b-coefficient)
-    (onum #/cons
+    (cnf->onum #/cons
       (list
         (onum-plus-binary a-power b-power)
-        (if (equal? onum-zero b-power)
+        (mat b-power 0
           (* a-coefficient b-coefficient)
           b-coefficient))
       a-rest)))
 
 (define/contract (onum-times-list ns)
-  (-> (listof onum?) onum?)
-  (list-foldr ns onum-one #/fn a b #/onum-times-binary a b))
+  (-> (or/c (list/c) #/*list/c onum<e0? onum<=e0?) onum<=e0?)
+  (list-foldr ns 1 #/fn a b #/onum-times-binary a b))
 
 (define/contract (onum-times . ns)
-  (->* () #:rest (listof onum?) onum?)
+  (->* () #:rest (or/c (list/c) #/*list/c onum<e0? onum<=e0?)
+    onum<=e0?)
   (onum-times-list ns))
 
 ; TODO: All the procedures in this module need to be tested, but this
@@ -267,12 +285,16 @@
 ; and `(equal? (onum-plus (onum-times amount quotient) remainder) n)`,
 ; if it exists. It exists as long as `amount` is nonzero.
 (define/contract (onum-untimes amount n)
-  (-> onum? onum? #/maybe/c #/list/c onum? onum?)
-  (dissect amount (onum amount-expansion)
+  (-> onum<=e0? onum<=e0? #/maybe/c #/list/c onum<=e0? onum<e0?)
+  (mat n (onum-e0)
+    (just #/list
+      (mat amount (onum-e0) 1 (onum-e0))
+      0)
+  #/if (onum<? n amount) (just #/list 0 n)
+  #/w- amount-expansion (onum->cnf amount)
   #/expect amount-expansion (cons amount-first amount-rest) (nothing)
   #/dissect amount-first (list amount-power amount-coefficient)
-  #/if (onum<? n amount) (just #/list onum-zero n)
-  #/dissect n (onum #/cons (list n-power n-coefficient) n-rest)
+  #/dissect (onum->cnf n) (cons (list n-power n-coefficient) n-rest)
   
   ; OPTIMIZATION: If both ordinals are finite, we can use Racket's
   ; `quotient/remainder` on the corresponding Racket integers.
@@ -280,11 +302,11 @@
   ; TODO: Test this without the optimization in place, for confidence
   ; that it's not changing the behavior.
   ;
-  #/if (equal? onum-zero n-power)
+  #/mat n-power 0
     (let ()
       (define-values (q r)
         (quotient/remainder n-coefficient amount-coefficient))
-      (just #/list (nat->onum q) (nat->onum r)))
+      (just #/list q r))
   
   #/dissect
     (if (equal? amount-power n-power)
@@ -292,7 +314,8 @@
       #/dissect (nat->maybe q-first-1) (just q-first-2)
       #/list q-first-1 q-first-2)
       (w- q-first
-        (onum #/list (onum-drop amount-power n-power) n-coefficient)
+        (onum->cnf
+        #/list (onum-drop amount-power n-power) n-coefficient)
       ; NOTE: The second element of this list doesn't matter because
       ; the first one is guaranteed to multiply to a value less than
       ; `n`.
@@ -326,9 +349,8 @@
   #/just #/list (onum-plus-binary q-first q-rest) r))
 
 (define/contract (onum-pow-by-nat base exponent)
-  (-> onum? natural? onum?)
-  (mat exponent 0 onum-one
-  #/mat exponent 1 base
+  (-> onum<e0? natural? onum<e0?)
+  (mat exponent 0 1
   ; We proceed by the method of exponentiation by parts: We recur on
   ; half the exponent and use that result twice in order to save on
   ; the overall number of multiplications performed.
@@ -343,29 +365,26 @@
 
 ; TODO: This one's also tricky. Let's make sure to test this.
 (define/contract (onum-pow-binary base exponent)
-  (-> onum? onum? onum?)
-  (dissect base (onum base-expansion)
-  #/dissect exponent (onum exponent-expansion)
-  #/if (equal? onum-zero exponent) onum-one
-  #/expect base-expansion (cons base-first base-rest) onum-zero
+  (-> onum<e0? onum<e0? onum<e0?)
+  (mat exponent 0 1
+  #/w- base-expansion (onum->cnf base)
+  #/expect base-expansion (cons base-first base-rest) 0
   #/dissect base-first (list base-first-power base-first-coefficient)
-  #/dissect (onum-untimes onum-omega exponent)
+  #/dissect (onum-untimes (onum-omega) exponent)
     (just #/list exponent-limit-part-div-omega exponent-finite-part)
-  #/dissect (onum->maybe-nat exponent-finite-part)
-    (just exponent-finite-part)
   #/w- exponent-limit-part
-    (onum-times onum-omega exponent-limit-part-div-omega)
+    (onum-times (onum-omega) exponent-limit-part-div-omega)
   #/onum-times
-    (onum
+    (cnf->onum
     #/list #/list (onum-times base-first-power exponent-limit-part) 1)
     (onum-pow-by-nat base exponent-finite-part)))
 
 (define/contract (onum-pow-list ns)
-  (-> (listof onum?) onum?)
-  (list-foldr ns onum-one #/fn a b #/onum-pow-binary a b))
+  (-> (listof onum<e0?) onum<e0?)
+  (list-foldr ns 1 #/fn a b #/onum-pow-binary a b))
 
 (define/contract (onum-pow . ns)
-  (->* () #:rest (listof onum?) onum?)
+  (->* () #:rest (listof onum<e0?) onum<e0?)
   (onum-pow-list ns))
 
 ; TODO: See if we can define an `onum-log` operation that's related to
@@ -379,52 +398,9 @@
 ; for a given `amount` and a given `n`, such that
 ; `(onum<? factor amount)` and
 ; `(onum<? term (onum-pow amount exponent))`.
-
-
-(define/contract (onumext? x)
-  (-> any/c boolean?)
-  (mat x (nothing) #t
-  #/mat x (just x) (onum? x)
-    #f))
-
-(define/contract (onumext-compare a b)
-  (-> onumext? onumext? #/or/c '< '= '>)
-  (expect a (just a) (expect b (just b) '= '>)
-  #/expect b (just b) '<
-  #/onum-compare a b))
-
-(define/contract (onumext<? a b)
-  (-> onumext? onumext? boolean?)
-  (eq? '< #/onumext-compare a b))
-
-(define/contract (onumext>? a b)
-  (-> onumext? onumext? boolean?)
-  (eq? '> #/onumext-compare a b))
-
-(define/contract (onumext<=? a b)
-  (-> onumext? onumext? boolean?)
-  (not #/onumext>? a b))
-
-(define/contract (onumext>=? a b)
-  (-> onumext? onumext? boolean?)
-  (not #/onumext<? a b))
-
-(define/contract (onumext-plus1 n)
-  (-> onumext? onumext?)
-  (maybe-map n #/fn n #/onum-plus1 n))
-
-(define/contract (onumext-plus a b)
-  (-> onum? onumext? onumext?)
-  (maybe-map b #/fn b #/onum-plus a b))
-
-(define/contract (onumext-drop1 n)
-  (-> onumext? #/maybe/c onumext?)
-  (expect n (just n) (just #/nothing)
-  #/expect (onum-drop1 n) (just result) (nothing)
-  #/just #/just result))
-
-(define/contract (onumext-drop amount n)
-  (-> onum? onumext? #/maybe/c onumext?)
-  (expect n (just n) (just #/nothing)
-  #/expect (onum-drop amount n) (just result) (nothing)
-  #/just #/just result))
+;
+; It looks like just such an operation is desccribed here, along with
+; a greatest common divisor operation and prime factorization, which
+; would also be good:
+;
+; https://www.maplesoft.com/products/maple/new_features/maple19/Ordinals_Maple2015.pdf
