@@ -42,7 +42,7 @@
   ; operations.
   olist-zero olist-build olist-length
   olist-plus1
-  olist-plus-binary olist-plus-list olist-plus
+  olist-plus-list olist-plus
   olist-drop1
   olist-drop
   
