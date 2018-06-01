@@ -28,7 +28,8 @@
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
-(require #/only-in lathe-comforts/maybe just maybe/c nothing)
+(require #/only-in lathe-comforts/maybe
+  just maybe/c maybe-map nothing)
 (require #/only-in lathe-comforts/list
   list-each list-foldl list-foldr list-map nat->maybe)
 (require #/only-in lathe-comforts/struct struct-easy)
@@ -36,6 +37,7 @@
 ; TODO: Document all of these exports.
 (provide
   onum<=e0? onum<e0?
+  onum<=omega? onum<omega?
   
   ; TODO: Decide whether to provide these. Maybe provide this
   ; functionality in another way, like a logarithm operation.
@@ -51,6 +53,8 @@
   onum-drop
   onum-times-list onum-times
   onum-untimes
+  onum->limit-plus-finite
+  onum-pred-maybe
   onum-pow-list onum-pow
 )
 
@@ -82,13 +86,13 @@
         (error "Expected each power to be strictly less than the last")
         power))))
 
-(define/contract (onum<=e0? x)
-  (-> any/c boolean?)
-  (or (onum<e0? x) (onum-e0? x)))
-
 (define/contract (onum<e0? x)
   (-> any/c boolean?)
   (or (natural? x) (onum-cnf? x)))
+
+(define/contract (onum<=e0? x)
+  (-> any/c boolean?)
+  (or (onum<e0? x) (onum-e0? x)))
 
 (define/contract (onum->cnf n)
   (-> onum<e0? #/listof #/list/c onum<e0? exact-positive-integer?)
@@ -160,6 +164,14 @@
 (define/contract (onum-omega)
   (-> onum<e0?)
   (onum-cnf #/list #/list 1 1))
+
+(define/contract (onum<=omega? x)
+  (-> any/c boolean?)
+  (or (natural? x) (equal? x #/onum-omega)))
+
+(define/contract (onum<omega? x)
+  (-> any/c boolean?)
+  (natural? x))
 
 ; NOTE: This is just like `onum-e0` except for its interaction with
 ; `struct-constructor-procedure?`.
@@ -348,6 +360,18 @@
   #/dissect (onum-untimes amount n-rest) (just #/list q-rest r)
   #/just #/list (onum-plus-binary q-first q-rest) r))
 
+(define/contract (onum->limit-plus-finite n)
+  (-> onum<=e0? #/list/c onum<=e0? natural?)
+  (dissect (onum-untimes (onum-omega) n)
+    (just #/list limit-part-div-omega finite-part)
+  #/list (onum-times (onum-omega) limit-part-div-omega) finite-part))
+
+(define/contract (onum-pred-maybe n)
+  (-> onum<=e0? #/maybe/c onum<e0?)
+  (dissect (onum->limit-plus-finite n) (list limit-part finite-part)
+  #/maybe-map (nat->maybe finite-part) #/fn finite-part
+    (onum-plus limit-part finite-part)))
+
 (define/contract (onum-pow-by-nat base exponent)
   (-> onum<e0? natural? onum<e0?)
   (mat exponent 0 1
@@ -370,10 +394,8 @@
   #/w- base-expansion (onum->cnf base)
   #/expect base-expansion (cons base-first base-rest) 0
   #/dissect base-first (list base-first-power base-first-coefficient)
-  #/dissect (onum-untimes (onum-omega) exponent)
-    (just #/list exponent-limit-part-div-omega exponent-finite-part)
-  #/w- exponent-limit-part
-    (onum-times (onum-omega) exponent-limit-part-div-omega)
+  #/dissect (onum->limit-plus-finite exponent)
+    (list exponent-limit-part exponent-finite-part)
   #/onum-times
     (cnf->onum
     #/list #/list (onum-times base-first-power exponent-limit-part) 1)

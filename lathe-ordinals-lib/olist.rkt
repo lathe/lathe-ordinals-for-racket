@@ -55,6 +55,8 @@
   ; never reached by `factor-olist`.
 ;  onum-times-list onum-times
 ;  onum-untimes
+;  onum->limit-plus-finite
+;  onum-pred-maybe
 ;  onum-pow-list onum-pow
   
   ; TODO: If we ever implement an `onum-log`, consider its analogous
