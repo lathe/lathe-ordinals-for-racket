@@ -25,8 +25,10 @@
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define/generic define-generics)
 
-(require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
-(require #/only-in lathe-comforts/maybe just maybe/c nothing)
+(require #/only-in lathe-comforts
+  dissect dissectfn expect fn mat w- w-loop)
+(require #/only-in lathe-comforts/maybe
+  just maybe/c maybe-map nothing)
 (require #/only-in lathe-comforts/list
   list-foldl list-foldr nat->maybe)
 (require #/only-in lathe-comforts/struct struct-easy)
@@ -157,7 +159,8 @@
     (define (olist-rep-length this)
       (expect this (olist-rep-dynamic start stop index->element)
         (error "Expected this to be an olist-rep-dynamic")
-      #/onum-drop start stop))
+      #/dissect (onum-drop start stop) (just len)
+        len))
     
     (define (olist-rep-drop1 this)
       (expect this (olist-rep-dynamic start stop index->element)
@@ -348,7 +351,7 @@
       (error "Expected a to be an olist-rep"))
     (unless (olist-rep? b)
       (error "Expected b to be an olist-rep"))
-    (unless (equal? (olist-length a) (olist-length b))
+    (unless (equal? (olist-rep-length a) (olist-rep-length b))
       (error "Expected the lengths of a and b to be the same"))
     (unless (procedure? func)
       (error "Expected func to be a procedure")))
@@ -382,8 +385,8 @@
       #/dissect (-drop amount b)
         (just #/list (olist b-dropped) (olist b-rest))
       #/just #/list
-        (olist #/olist-rep-map-kv a-dropped b-dropped func)
-        (olist #/olist-rep-map-kv a-rest b-rest func)))
+        (olist #/olist-rep-zip-map a-dropped b-dropped func)
+        (olist #/olist-rep-zip-map a-rest b-rest func)))
   ])
 
 (define/contract (olist-zip-map a b func)
@@ -527,7 +530,7 @@
       (error "Expected stop to be an ordinal no greater than epsilon zero"))
     (expect (onum-drop1 stop) (just stop-pred)
       (error "Expected stop to be nonzero")
-    #/unless (onum<=? stop-pred #/olist-length orig)
+    #/unless (onum<=? stop-pred #/olist-rep-length orig)
       (error "Expected stop to be no greater than one plus the length of orig")))
   #:other
   #:methods gen:olist-rep
@@ -545,9 +548,9 @@
       (expect this (olist-rep-tails stop orig)
         (error "Expected this to be an olist-rep-tails")
       #/expect (onum-drop1 stop) (just new-stop) (nothing)
-      #/just #/list (fn orig)
+      #/just #/list (fn #/olist orig)
         (mat new-stop 0
-          (olist #/olist-rep-zero)
+          (olist-zero)
           (dissect (-drop1 orig) (just #/list get-first #/olist rest)
           #/olist #/olist-rep-tails new-stop rest))))
     
@@ -557,10 +560,10 @@
       #/expect (onum-drop amount stop) (just new-stop) (nothing)
       #/just #/list
         (mat amount 0
-          (olist #/olist-rep-zero)
+          (olist-zero)
           (olist #/olist-rep-tails amount orig))
         (mat new-stop 0
-          (olist #/olist-rep-zero)
+          (olist-zero)
           (dissect (-drop amount orig)
             (just #/list (olist dropped) (olist rest))
           #/olist #/olist-rep-tails new-stop rest))))

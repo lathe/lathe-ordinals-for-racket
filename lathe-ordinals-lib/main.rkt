@@ -225,8 +225,8 @@
 (define/contract (onum-drop1 n)
   (-> onum<=e0? #/maybe/c onum<=e0?)
   (if (natural? n)
-    (- n 1)
-    n))
+    (nat->maybe n)
+    (just n)))
 
 ; This is left subtraction. We're finding the value `result` such that
 ; `(equal? (onum-plus amount result) n)`, if it exists. It exists as
@@ -236,7 +236,7 @@
   (mat n (onum-e0) (just #/mat amount (onum-e0) 0 (onum-e0))
   #/mat amount (onum-e0) (nothing)
   #/w- amount-expansion (onum->cnf amount)
-  #/w- n-expansion (onum->cnf amount)
+  #/w- n-expansion (onum->cnf n)
   #/w-loop next
     amount-expansion amount-expansion
     n-expansion n-expansion
@@ -255,7 +255,7 @@
       (nat-compare amount-coefficient n-coefficient)
     #/mat coefficient-comparison '> (nothing)
     #/mat coefficient-comparison '= (next amount-rest n-rest)
-    #/cnf->onum
+    #/just #/cnf->onum
     #/cons (list n-power #/- n-coefficient amount-coefficient)
       n-rest)))
 
