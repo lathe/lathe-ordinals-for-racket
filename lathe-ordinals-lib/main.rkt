@@ -24,6 +24,7 @@
 (require #/only-in racket/contract/base
   *list/c -> ->* any/c flat-contract? list/c listof or/c)
 (require #/only-in racket/contract/region define/contract)
+(require #/only-in racket/list add-between)
 (require #/only-in racket/math natural?)
 
 (require #/only-in lathe-comforts
@@ -84,7 +85,22 @@
         (error "Expected each coefficient to be an exact positive integer")
       #/expect (onum<? power prev-power) #t
         (error "Expected each power to be strictly less than the last")
-        power))))
+        power)))
+  #:write
+  (fn this
+    (expect this (onum-cnf base-omega-expansion)
+      (error "Expected this to be an onum-cnf")
+    #/list #/apply string-append #/add-between
+      (list-map base-omega-expansion
+      #/dissectfn (list power coefficient)
+        (mat power 0 (number->string coefficient)
+        #/string-append
+          "omega"
+          (mat power 1 ""
+          #/string-append "^" #/number->string power)
+          (mat coefficient 1 ""
+          #/string-append " * " #/number->string coefficient)))
+      " + ")))
 
 (define/contract (onum<e0? x)
   (-> any/c boolean?)
