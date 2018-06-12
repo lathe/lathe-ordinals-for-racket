@@ -22,7 +22,7 @@
 
 
 (require #/only-in racket/contract/base
-  *list/c -> ->* any/c flat-contract? list/c listof or/c)
+  *list/c -> ->* and/c any/c flat-contract? list/c listof or/c)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/list add-between)
 (require #/only-in racket/math natural?)
@@ -47,6 +47,7 @@
   onum->cnf
   
   onum-compare onum<? onum>? onum<=? onum>=? onum</c onum<=/c
+  onum-min-list onum-min onum-max-list onum-max
   onum-omega (rename-out [-onum-e0 onum-e0])
   onum-plus1
   onum-plus-list onum-plus
@@ -176,6 +177,35 @@
   (-> onum<=e0? flat-contract?)
   ; TODO: Don't use a plain lambda like this for a contract.
   (fn v #/and (onum<=e0? v) (onum<=? v n)))
+
+(define/contract (onum-min-binary a b)
+  (-> onum<=e0? onum<=e0? onum<=e0?)
+  (if (onum<=? a b)
+    a
+    b))
+
+(define/contract (onum-min-list ns)
+  (-> (and/c pair? #/listof onum<=e0?) onum<=e0?)
+  (dissect ns (cons first rest)
+  #/list-foldl first rest #/fn a b #/onum-min-binary a b))
+
+(define/contract (onum-min . ns)
+  (->* () #:rest (and/c pair? #/listof onum<=e0?) onum<=e0?)
+  (onum-min-list ns))
+
+(define/contract (onum-max-binary a b)
+  (-> onum<=e0? onum<=e0? onum<=e0?)
+  (if (onum<? a b)
+    b
+    a))
+
+(define/contract (onum-max-list ns)
+  (-> (listof onum<=e0?) onum<=e0?)
+  (list-foldl 0 ns #/fn a b #/onum-max-binary a b))
+
+(define/contract (onum-max . ns)
+  (->* () #:rest (listof onum<=e0?) onum<=e0?)
+  (onum-max-list ns))
 
 (define/contract (onum-omega)
   (-> onum<e0?)
