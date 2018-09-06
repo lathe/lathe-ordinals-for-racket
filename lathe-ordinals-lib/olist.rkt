@@ -34,12 +34,14 @@
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require #/only-in lathe-ordinals
-  onum<=? onum<? onum</c onum<=e0? onum<e0? onum->cnf onum-compare
-  onum-drop onum-drop1 onum-omega onum-plus onum-plus1)
+  0<onum<e0? onum<=? onum<? onum</c onum<=e0? onum<=greatest-known?
+  onum<e0? onum->cnf onum-compare onum-drop onum-drop1 onum-omega
+  onum-plus onum-plus1)
 
 ; TODO: Document all of these exports.
 (provide
-  olist<=e0? olist<e0?
+  olist<=greatest-known?
+  olist<=e0? olist<e0? 0<olist<e0?
   ; TODO: Consider providing `list->olist` and `olist->maybe-list`
   ; operations.
   olist-zero olist-build olist-length
@@ -87,18 +89,38 @@
 
 ; NOTE: This is just like `olist?` except for its interaction with
 ; `struct-predicate-procedure?`.
-(define/contract (olist<=e0? x)
+(define/contract (olist<=e0? v)
   (-> any/c boolean?)
-  (olist? x))
+  (olist? v))
+
+; Returns whether the given value is recognized as an ordinal-bounded
+; list by this library at all. Currently, these only go up to (and
+; include) lists of length epsilon zero, but this set may expand in
+; the future.
+;
+; Note that this library still explicitly uses `olist<=e0?` for most
+; of its contracts. It uses `olist<=greatest-known?` for a contract
+; only when the *client* should be prepared to handle ordinal numbers
+; greater than this library can currently recognize. (Usually the
+; client will have to handle these by treating them as
+; indistinguishable values.)
+;
+(define/contract (olist<=greatest-known? v)
+  (-> any/c boolean?)
+  (olist<=e0? v))
 
 (define/contract (olist-length lst)
-  (-> olist<=e0? onum<=e0?)
+  (-> olist<=greatest-known? onum<=greatest-known?)
   (dissect lst (olist rep)
   #/olist-rep-length rep))
 
-(define/contract (olist<e0? x)
+(define/contract (olist<e0? v)
   (-> any/c boolean?)
-  (and (olist? x) (onum<e0? #/olist-length x)))
+  (and (olist<=e0? v) (onum<e0? #/olist-length v)))
+
+(define/contract (0<olist<e0? v)
+  (-> any/c boolean?)
+  (and (olist<e0? v) (0<onum<e0? #/olist-length v)))
 
 (define/contract (olist-drop1 lst)
   (-> olist<=e0? #/maybe/c #/list/c (-> any/c) olist<=e0?)
@@ -112,9 +134,9 @@
 
 
 ; TODO: See if we should export this.
-(define/contract (olist-zero? x)
+(define/contract (olist-zero? v)
   (-> any/c boolean?)
-  (and (olist<=e0? x) (equal? 0 #/olist-length x)))
+  (and (olist<=e0? v) (equal? 0 #/olist-length v)))
 
 
 (struct-easy (olist-rep-zero)
@@ -185,8 +207,10 @@
 
 (define/contract (olist-build len index->element)
   (->i
-    ([len onum<=e0?] [index->element (len) (-> (onum</c len) any/c)])
-    [_ olist<=e0?])
+    (
+      [len onum<=greatest-known?]
+      [index->element (len) (-> (onum</c len) any/c)])
+    [_ olist<=greatest-known?])
   (mat len 0 (olist-zero)
   #/olist #/olist-rep-dynamic 0 len index->element))
 
@@ -251,7 +275,7 @@
 
 (define/contract (olist-plus1 get-first rest)
   (-> (-> any/c) olist<=e0? olist<e0?)
-  (olist-plus (olist-build 1 #/fn _ #/get-first) rest))
+  (olist-plus (olist-build 1 #/dissectfn _ #/get-first) rest))
 
 
 (struct-easy (olist-rep-map orig func)
@@ -390,9 +414,9 @@
   ])
 
 (define/contract (olist-zip-map a b func)
-  (->i ([a olist?] [b olist?] [func (-> any/c any/c any/c)])
+  (->i ([a olist<=e0?] [b olist<=e0?] [func (-> any/c any/c any/c)])
     #:pre (a b) (equal? (olist-length a) (olist-length b))
-    [_ olist?])
+    [_ olist<=e0?])
   (dissect a (olist a)
   #/dissect b (olist b)
   #/olist #/olist-rep-zip-map a b func))
@@ -450,12 +474,12 @@
           new-stop new-on-zero on-succ on-limit)))
   ])
 
-; Given an element thunk to put at position zero, a function to
-; produce an element thunk at a successor position from the element
-; thunk at its predecessor position, and an `on-limit` function to
-; compute an element thunk at a limit position, this returns an
-; ordinal-unbounded list where every element is computed in those
-; ways.
+; Given an ordinal length for the list, an element thunk to put at
+; position zero, a function to produce an element thunk at a successor
+; position from the element thunk at its predecessor position, and an
+; `on-limit` function to compute an element thunk at a limit position,
+; this returns a list of the specified length where every element is
+; computed in those ways.
 ;
 ; The `on-limit` function must take an omega-sized list of element
 ; thunks from strictly ascending positions which approach the limit
@@ -463,10 +487,18 @@
 ; ascending sequence of positions is chosen, but this is not verified
 ; by the library.
 ;
-(define/contract (olist-transfinite-unfold on-zero on-succ on-limit)
-  (-> (-> any/c) (-> (-> any/c) #/-> any/c) (-> olist? #/-> any/c)
-    olist?)
-  (olist #/olist-rep-transfinite-unfold 0 on-zero on-succ on-limit))
+(define/contract
+  (olist-transfinite-unfold len on-zero on-succ on-limit)
+  (->
+    onum<=e0?
+    (-> any/c)
+    (-> (-> any/c) #/-> any/c)
+    (-> olist<e0? #/-> any/c)
+    olist<=e0?)
+  (mat len 0
+    (olist-zero)
+    (olist #/olist-rep-transfinite-unfold
+      len on-zero on-succ on-limit)))
 
 
 ; Given an ordinal numeral, a result value to use for zero, a function
@@ -601,7 +633,7 @@
       [lst olist<=e0?]
       [i (lst) (onum</c #/olist-length lst)]
       [get-elem (-> any/c)])
-    [_ olist?])
+    [_ olist<=e0?])
   (dissect (olist-drop i lst) (just #/list past lst)
   #/dissect (olist-drop1 lst) (just #/list get-old-elem rest)
   #/olist-plus past #/olist-plus1 get-elem rest))
@@ -609,10 +641,10 @@
 (define/contract (olist-update-thunk lst i func)
   (->i
     (
-      [lst olist?]
+      [lst olist<=e0?]
       [i (lst) (onum</c #/olist-length lst)]
       [func (-> (-> any/c) (-> any/c))])
-    [_ olist?])
+    [_ olist<=e0?])
   (dissect (olist-drop i lst) (just #/list past lst)
   #/dissect (olist-drop1 lst) (just #/list get-elem rest)
   #/olist-plus past #/olist-plus1 (func get-elem) rest))

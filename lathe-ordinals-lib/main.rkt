@@ -37,8 +37,9 @@
 
 ; TODO: Document all of these exports.
 (provide
-  onum<=e0? onum<e0?
-  onum<=omega? onum<omega?
+  onum<=greatest-known?
+  onum<=e0? onum<e0? 0<onum<e0?
+  onum<=omega? onum<omega? 0<onum<omega?
   
   ; TODO: Decide whether to provide these. Maybe provide this
   ; functionality in another way, like a logarithm operation.
@@ -103,13 +104,32 @@
           #/string-append " * " #/number->string coefficient)))
       " + ")))
 
-(define/contract (onum<e0? x)
+(define/contract (onum<e0? v)
   (-> any/c boolean?)
-  (or (natural? x) (onum-cnf? x)))
+  (or (natural? v) (onum-cnf? v)))
 
-(define/contract (onum<=e0? x)
+(define/contract (onum<=e0? v)
   (-> any/c boolean?)
-  (or (onum<e0? x) (onum-e0? x)))
+  (or (onum<e0? v) (onum-e0? v)))
+
+(define/contract (0<onum<e0? v)
+  (-> any/c boolean?)
+  (and (onum<e0? v) (not #/equal? 0 v)))
+
+; Returns whether the given value is recognized as an ordinal number
+; by this library at all. Currently, these only go up to (and include)
+; epsilon zero, but this set may expand in the future.
+;
+; Note that this library still explicitly uses `onum<=e0?` for most of
+; its contracts. It uses `onum<=greatest-known?` for a contract only
+; when the *client* should be prepared to handle ordinal numbers
+; greater than this library can currently recognize. (Usually the
+; client will have to handle these by treating them as
+; indistinguishable values.)
+;
+(define/contract (onum<=greatest-known? v)
+  (-> any/c boolean?)
+  (onum<=e0? v))
 
 (define/contract (onum->cnf n)
   (-> onum<e0? #/listof #/list/c onum<e0? exact-positive-integer?)
@@ -135,7 +155,7 @@
     '>))
 
 (define/contract (onum-compare a b)
-  (-> onum<=e0? onum<=e0? #/or/c '< '= '>)
+  (-> onum<=greatest-known? onum<=greatest-known? #/or/c '< '= '>)
   (mat a (onum-e0) (mat b (onum-e0) '= '>)
   #/mat b (onum-e0) '<
   #/w- a (onum->cnf a)
@@ -153,71 +173,80 @@
     #/next a-rest b-rest)))
 
 (define/contract (onum<? a b)
-  (-> onum<=e0? onum<=e0? boolean?)
+  (-> onum<=greatest-known? onum<=greatest-known? boolean?)
   (eq? '< #/onum-compare a b))
 
 (define/contract (onum>? a b)
-  (-> onum<=e0? onum<=e0? boolean?)
+  (-> onum<=greatest-known? onum<=greatest-known? boolean?)
   (eq? '> #/onum-compare a b))
 
 (define/contract (onum<=? a b)
-  (-> onum<=e0? onum<=e0? boolean?)
+  (-> onum<=greatest-known? onum<=greatest-known? boolean?)
   (not #/onum>? a b))
 
 (define/contract (onum>=? a b)
-  (-> onum<=e0? onum<=e0? boolean?)
+  (-> onum<=greatest-known? onum<=greatest-known? boolean?)
   (not #/onum<? a b))
 
 (define/contract (onum</c n)
-  (-> onum<=e0? flat-contract?)
+  (-> onum<=greatest-known? flat-contract?)
   ; TODO: Don't use a plain lambda like this for a contract.
-  (fn v #/and (onum<=e0? v) (onum<? v n)))
+  (fn v #/and (onum<=greatest-known? v) (onum<? v n)))
 
 (define/contract (onum<=/c n)
-  (-> onum<=e0? flat-contract?)
+  (-> onum<=greatest-known? flat-contract?)
   ; TODO: Don't use a plain lambda like this for a contract.
-  (fn v #/and (onum<=e0? v) (onum<=? v n)))
+  (fn v #/and (onum<=greatest-known? v) (onum<=? v n)))
 
 (define/contract (onum-min-binary a b)
-  (-> onum<=e0? onum<=e0? onum<=e0?)
+  (-> onum<=greatest-known? onum<=greatest-known?
+    onum<=greatest-known?)
   (if (onum<=? a b)
     a
     b))
 
 (define/contract (onum-min-list ns)
-  (-> (and/c pair? #/listof onum<=e0?) onum<=e0?)
+  (-> (and/c pair? #/listof onum<=greatest-known?)
+    onum<=greatest-known?)
   (dissect ns (cons first rest)
   #/list-foldl first rest #/fn a b #/onum-min-binary a b))
 
 (define/contract (onum-min . ns)
-  (->* () #:rest (and/c pair? #/listof onum<=e0?) onum<=e0?)
+  (->* () #:rest (and/c pair? #/listof onum<=greatest-known?)
+    onum<=greatest-known?)
   (onum-min-list ns))
 
 (define/contract (onum-max-binary a b)
-  (-> onum<=e0? onum<=e0? onum<=e0?)
+  (-> onum<=greatest-known? onum<=greatest-known?
+    onum<=greatest-known?)
   (if (onum<? a b)
     b
     a))
 
 (define/contract (onum-max-list ns)
-  (-> (listof onum<=e0?) onum<=e0?)
+  (-> (listof onum<=greatest-known?) onum<=greatest-known?)
   (list-foldl 0 ns #/fn a b #/onum-max-binary a b))
 
 (define/contract (onum-max . ns)
-  (->* () #:rest (listof onum<=e0?) onum<=e0?)
+  (->* () #:rest (and/c pair? #/listof onum<=greatest-known?)
+    onum<=greatest-known?)
   (onum-max-list ns))
 
 (define/contract (onum-omega)
   (-> onum<e0?)
   (onum-cnf #/list #/list 1 1))
 
-(define/contract (onum<=omega? x)
+(define/contract (onum<=omega? v)
   (-> any/c boolean?)
-  (or (natural? x) (equal? x #/onum-omega)))
+  (or (natural? v) (equal? v #/onum-omega)))
 
-(define/contract (onum<omega? x)
+(define/contract (onum<omega? v)
   (-> any/c boolean?)
-  (natural? x))
+  (natural? v))
+
+(define/contract (0<onum<omega? v)
+  (-> any/c boolean?)
+  (and (onum<omega? v) (not (equal? 0 v))))
 
 ; NOTE: This is just like `onum-e0` except for its interaction with
 ; `struct-constructor-procedure?`.
