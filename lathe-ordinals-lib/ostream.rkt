@@ -37,9 +37,6 @@
 ;   language governing permissions and limitations under the License.
 
 
-; 
-
-
 
 (require #/only-in racket/contract/base
   -> any/c contract? list/c or/c recursive-contract struct/c)
