@@ -16,9 +16,11 @@ That's a lot of talk about set theory and mathematical foundations, but this lib
 
 Here's what the library offers now:
 
-* Data structures to represent the ordinal numbers of ZFC set theory that are less than or equal to epsilon zero (`onum<=e0?`). The ordinals less than epsilon zero (`onum<e0?`) are the earliest set of ordinals that contains omega and has full support for ordinal addition, multiplication, and exponentiation.
+* Module `lathe-ordinals`: Data structures to represent the ordinal numbers of ZFC set theory that are less than or equal to epsilon zero (`onum<=e0?`). The ordinals less than epsilon zero (`onum<e0?`) are the earliest set of ordinals that contains omega and has full support for ordinal addition, multiplication, and exponentiation.
 
-* A corresponding data structure (`olist<=e0?`) to implement lazy lists of length less than or equal to epsilon zero. Most of what you can do with these, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
+* Module `lathe-ordinals/olist`: A corresponding data structure (`olist<=e0?`) to implement lazy lists of length less than or equal to epsilon zero. Most of what you can do with these, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
+
+* Module `lathe-ordinals/ostream`: Representations of ordinal numbers and ordinal-indexed streams which represent the codata counterparts of the `lathe-ordinals` numbers and the `lathe-ordinals/olist` lists. These are good for representing ordinal-indexed collections that have no particular ordinal bounding them, or for collections whose bound might be difficult or impossible to calculate.
 
 
 ## Installation and use
@@ -27,4 +29,4 @@ This is a library for Racket. To install it from the Racket package index, run `
 
 To install it from source, run `raco pkg install --deps search-auto` from the `lathe-ordinals-lib/` directory.
 
-[Documentation for Lathe Ordinals for Racket](http://docs.racket-lang.org/lathe-ordinals/index.html) is available at the Racket documentation website, and it's maintained in the `lathe-comforts-doc/` directory.
+[Some sparse documentation for Lathe Ordinals for Racket](http://docs.racket-lang.org/lathe-ordinals/index.html) is available at the Racket documentation website, and it's maintained in the `lathe-ordinals-doc/` directory.
