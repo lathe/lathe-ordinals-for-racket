@@ -47,6 +47,7 @@
 (require #/only-in lathe-comforts/maybe
   just maybe-bind maybe/c nothing)
 (require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/trivial trivial)
 
 (require #/only-in lathe-ordinals
   onum-compare onum-drop onum-e0 onum<=e0? onum<e0? 0<onum<e0?
@@ -136,11 +137,6 @@
   
   ostream-ref-maybe-thunk
 )
-
-
-
-; TODO: Put this in Lathe Comforts somewhere.
-(struct-easy (trivial))
 
 
 
