@@ -52,12 +52,13 @@
 (require #/only-in lathe-comforts/trivial trivial)
 
 (require #/only-in lathe-ordinals
-  onum-compare onum-drop onum-e0 onum<=e0? onum<e0? 0<onum<e0?
+  onum-compare onum-drop onum-e0 onum<e0? 0<onum<e0?
   onum<=greatest-known? onum-omega onum-plus onum-pow)
 (require #/only-in lathe-ordinals/olist
-  olist-build olist-drop olist-drop1 olist<e0? olist<=e0? 0<olist<e0?
-  olist<=greatest-known? olist-length olist-map olist-map-kv olist-plus olist-ref-thunk
-  olist-tails olist-transfinite-unfold olist-zero olist-zip-map)
+  olist-build olist-drop olist-drop1 olist<e0? 0<olist<e0?
+  olist<=greatest-known? olist-length olist-map olist-map-kv
+  olist-plus olist-ref-thunk olist-tails olist-transfinite-unfold
+  olist-zero olist-zip-map)
 
 ; TODO: Document all of these exports.
 ;
@@ -119,10 +120,6 @@
   ; TODO: If we ever implement an `onum-log`, consider its analogous
   ; operations here as as well.
   
-  ; TODO: Uncomment the rest of this once we refactor it.
-  #;
-  (
-  
   ; TODO: See if we'll ever use `olist-codata-map-kv` -- or any of the
   ; others, for that matter.
   olist-codata-map olist-codata-map-kv olist-codata-zip-map
@@ -130,7 +127,6 @@
   olist-codata-transfinite-unfold-forever
   
   olist-codata-ref-maybe-thunk
-  )
 )
 
 
@@ -505,10 +501,6 @@
   (-> (onum-batches/c) onum-codata?)
   (onum-codata batches))
 
-(define/contract (onum->onum-codata n)
-  (-> onum<e0? onum-codata?)
-  (onum-codata #/fn #/onum-batch-done n))
-
 (define/contract (onum-codata-unknowable)
   (-> onum-codata?)
   (onum-codata
@@ -527,6 +519,36 @@
         (onum-batch-plus-onum big-onum
         #/onum-batch-stuck
         #/next #/onum-pow (onum-omega) big-onum)))))
+
+(define/contract (onum->onum-codata n)
+  (-> onum<=greatest-known? onum-codata?)
+  (if (onum<e0? n) (onum-codata #/fn #/onum-batch-done n)
+  
+  ; NOTE:
+  ;
+  ; We allow epsilon zero to be converted to an ordinal numeral
+  ; computation, but we don't allow it to be fully traversed (with
+  ; `onum-codata-drop`). This is because we have some things like
+  ; `(onum-codata-unknowable)` which are *designed* to be larger than
+  ; any known ordinal. If a programmer consumes data from a single
+  ; ordinal-indexed stream (or in this case an ordinal numeral
+  ; computation), they will often want to collect that data onto an
+  ; ordinal-indexed list as they go along (or in this case onto an
+  ; ordinal numeral). The data structures we offer can't go deeper
+  ; than epsilon zero, so if the programmer could reach a depth of
+  ; epsilon zero and find that they still have further to go, the
+  ; data structure they're aggregating things into would run out of
+  ; space.
+  ;
+  ; This sort of means our ordinal numerals and ordinal-indexed lists
+  ; can exceed the size of our ordinal numeral computations and
+  ; ordinal-indexed-streams, in a certain sense, just slightly. But if
+  ; this library ever gains support for ordinal numbers larger than
+  ; epsilon zero, some preexisting uses of ordinal-indexed streams
+  ; might beome larger in fact than any preexisting use of
+  ; ordinal-indexed lists.
+  ;
+  #/onum-codata-unknowable))
 
 (define/contract (onum-codata-plus1 n)
   (-> onum-codata? onum-codata?)
@@ -614,8 +636,21 @@
   (olist-codata batches))
 
 (define/contract (olist->olist-codata n)
-  (-> olist<e0? olist-codata?)
-  (olist-codata #/fn #/olist-batch-done n))
+  (-> olist<=greatest-known? olist-codata?)
+  (if (olist<e0? n) (olist-codata #/fn #/olist-batch-done n)
+  ; NOTE: We allow ordinal-indexed lists of size epsilon zero to be
+  ; converted to streams, but we don't allow them to be fully
+  ; traversed. See the note at `onum->onum-codata`.
+  #/onum-codata
+    (w-loop next big-onum (onum-omega) n n
+      (fn
+        ; TODO: If we ever have `list-batch-times-onum` and
+        ; `list-batch-pow-onum`, we should use them here. See the TODO
+        ; on `onum-codata-unknowable`.
+        (dissect (olist-drop big-onum n) (just #/list dropped n)
+        #/olist-batch-plus-olist dropped
+        #/onum-batch-stuck
+        #/next (onum-pow (onum-omega) big-onum) n)))))
 
 ; NOTE: The arguments to `index->element` will all be ordinal numbers.
 ; As of right now, all of those ordinals will satisfy `onum<e0?`, but
@@ -699,47 +734,44 @@
     (fn n-dropped n-rest #/just #/list n-dropped n-rest)
     (fn amount-dropped amount-rest #/nothing)))
 
-
-; TODO: We're in the process of refactoring the way we model all these
-; data/codata structures. Uncomment the rest of this once we finish
-; refactoring it.
-#;
-(
-
-(define (onum-batches-fold state get-batch func)
+(define (olist-batches-fold state get-batch func)
   (fn
     (w- batch (get-batch)
-    #/mat batch (olist-batch-done n)
+    #/mat batch (olist-batch-rep-done n)
       (dissect (func state n) (list state n)
-      #/olist-batch-done n)
-    #/dissect batch (olist-batch-progress n rest)
-      (dissect (func state n) (list state n)
-      #/olist-batch-progress n
-        (onum-batches-fold state rest func)))))
+      #/olist-batch-rep-done n)
+    #/mat batch (olist-batch-rep-stuck effect)
+      (olist-batches-fold state effect func)
+    #/dissect batch (olist-batch-rep-plus a b)
+      (dissect (func state a) (list state a)
+      #/olist-batch-rep-plus a
+        (olist-batches-fold state (fn b) func)))))
 
-(define (onum-batches-fold-with-rest state get-batch func)
+(define (olist-batches-fold-with-rest state get-batch func)
   (fn
     (w- batch (get-batch)
-    #/mat batch (olist-batch-done n)
+    #/mat batch (olist-batch-rep-done n)
       (dissect (func state n #/olist->olist-codata #/olist-zero)
         (list state n)
-      #/olist-batch-done n)
-    #/dissect batch (olist-batch-progress n rest)
-      (dissect (func state n #/olist-codata rest) (list state n)
-      #/olist-batch-progress n
-        (onum-batches-fold state rest func)))))
+      #/olist-batch-rep-done n)
+    #/mat batch (olist-batch-rep-stuck effect)
+      (olist-batches-fold-with-rest state effect func)
+    #/dissect batch (olist-batch-rep-plus a b)
+      (dissect (func state a #/olist-codata b) (list state a)
+      #/olist-batch-rep-plus a
+        (olist-batches-fold-with-rest state (fn b) func)))))
 
 (define/contract (olist-codata-map n func)
   (-> olist-codata? (-> any/c any/c) olist-codata?)
   (dissect n (olist-codata get-batch)
-  #/olist-codata #/onum-batches-fold (trivial) get-batch #/fn state n
+  #/olist-codata #/olist-batches-fold (trivial) get-batch #/fn state n
     (list state #/olist-map n func)))
 
 (define/contract (olist-codata-map-kv n func)
   (-> olist-codata? (-> onum<=greatest-known? any/c any/c)
     olist-codata?)
   (dissect n (olist-codata get-batch)
-  #/olist-codata #/onum-batches-fold 0 get-batch #/fn state n
+  #/olist-codata #/olist-batches-fold 0 get-batch #/fn state n
     (list (onum-plus state #/olist-length n)
       (olist-map-kv n #/fn i elem
         (func (onum-plus state i) elem)))))
@@ -756,10 +788,12 @@
   
   (define (extract-list get-batch)
     (w- batch (get-batch)
-    #/mat batch (olist-batch-done n)
+    #/mat batch (olist-batch-rep-done n)
       (list n #/fn #/olist-batch-done #/olist-zero)
-    #/dissect batch (olist-batch-progress n rest)
-      (list n rest)))
+    #/mat batch (olist-batch-rep-stuck effect)
+      (list (olist-zero) effect)
+    #/dissect batch (olist-batch-rep-plus a b)
+      (list a #/fn b)))
   
   (dissect a (olist-codata get-a-batch)
   #/dissect b (olist-codata get-b-batch)
@@ -791,13 +825,11 @@
             ; can.
             #/dissect (olist-drop small-n big-list)
               (just #/list big-list big-rest)
-            #/olist-batch-progress
+            #/olist-batch-plus-olist
               (olist-zip-map small-list big-list #/fn small big
                 (on-elems-small-big small big))
-              (next get-small-batch
-                (fn
-                  (olist-batch-plus-olist big-rest
-                  #/get-big-batch)))))
+              (olist-batch-stuck #/next get-small-batch #/fn
+                (olist-batch-plus-olist big-rest #/get-big-batch))))
         #/w- comparison (onum-compare an bn)
         #/mat comparison '<
           (process-inequal
@@ -810,14 +842,15 @@
             ; calling the original `on-elems` correctly.
             (fn b a #/on-elems a b))
         #/dissect comparison '=
-          (olist-batch-progress
+          (olist-batch-plus-olist
             (olist-zip-map a-list b-list #/fn a b #/on-elems a b)
-            (next get-a-batch get-b-batch)))))))
+            (olist-batch-stuck #/fn
+              (next get-a-batch get-b-batch))))))))
 
 (define/contract (olist-codata-tails n)
   (-> olist-codata? olist-codata?)
   (dissect n (olist-codata get-batch)
-  #/olist-codata #/onum-batches-fold-with-rest (trivial) get-batch
+  #/olist-codata #/olist-batches-fold-with-rest (trivial) get-batch
   #/fn state n rest
     (list state
       (olist-map (olist-tails n) #/fn olist-tail
@@ -850,9 +883,11 @@
     on-zero on-succ on-limit))
 
 (define/contract (olist-codata-ref-maybe-thunk n i)
-  (-> olist-codata? onum<=e0? #/maybe/c #/-> any/c)
-  (maybe-bind (olist-codata-drop i n) #/dissectfn (list dropped n)
+  (-> olist-codata? onum<e0? #/maybe/c #/-> any/c)
+  (maybe-bind
+    (olist-codata-drop
+      (olist->olist-codata #/olist-build i #/dissectfn _ #/trivial)
+      n)
+  #/dissectfn (list dropped n)
   #/maybe-bind (olist-codata-drop1 n) #/dissectfn (list get-first n)
   #/just get-first))
-
-)
