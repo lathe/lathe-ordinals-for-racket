@@ -341,8 +341,8 @@
   (-> olist<e0? olist-batch? olist-batch?)
   
   ; We don't use `olist-batch-rep-plus` if either argument is known to
-  ; be zero.
-  (mat amount 0 n
+  ; be empty.
+  (mat (olist-length amount) 0 n
   
   #/mat n (olist-batch-rep-done n)
     (olist-batch-rep-done #/olist-plus amount n)
