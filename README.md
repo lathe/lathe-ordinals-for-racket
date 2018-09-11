@@ -20,7 +20,7 @@ Here's what the library offers now:
 
 * Module `lathe-ordinals/olist`: A corresponding data structure (`olist<=e0?`) to implement lazy lists of length less than or equal to epsilon zero. Most of what you can do with these, you can do just by writing a function that takes an ordinal number as its argument. The difference has to do with garbage collection: These lists are designed so that if you append and remove an element, you can be sure that the diminished list no longer contains a reference to it.
 
-* Module `lathe-ordinals/ostream`: Representations of ordinal numbers and ordinal-indexed streams which represent the codata counterparts of the `lathe-ordinals` numbers and the `lathe-ordinals/olist` lists. These are good for representing ordinal-indexed collections that have no particular ordinal bounding them, or for collections whose bound might be difficult or impossible to calculate.
+* Module `lathe-ordinals/olist-codata`: Representations of ordinal numbers and ordinal-indexed streams which represent the codata counterparts of the `lathe-ordinals` numbers and the `lathe-ordinals/olist` lists. These are good for representing ordinal-indexed collections that have no particular ordinal bounding them, or for collections whose bound might be difficult or impossible to calculate.
 
 
 ## Installation and use

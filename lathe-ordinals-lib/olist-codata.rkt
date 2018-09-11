@@ -1,6 +1,6 @@
 #lang parendown racket/base
 
-; lathe-ordinals/ostream
+; lathe-ordinals/olist-codata
 ;
 ; A stream-like collection where the indexes can be any ordinal number
 ; less than epsilon zero. These are like the ordinal-indexed lists of
