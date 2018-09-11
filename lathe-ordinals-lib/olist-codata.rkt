@@ -45,7 +45,7 @@
 (require #/only-in racket/contract/region define/contract)
 
 (require #/only-in lathe-comforts
-  dissect dissectfn expect fn mat w- w-loop)
+  dissect dissectfn expect fn loopfn mat w- w-loop)
 (require #/only-in lathe-comforts/maybe
   just maybe-bind maybe/c nothing)
 (require #/only-in lathe-comforts/struct struct-easy)
@@ -53,10 +53,10 @@
 
 (require #/only-in lathe-ordinals
   onum-compare onum-drop onum-e0 onum<=e0? onum<e0? 0<onum<e0?
-  onum<=greatest-known? onum-plus)
+  onum<=greatest-known? onum-omega onum-plus onum-pow)
 (require #/only-in lathe-ordinals/olist
   olist-build olist-drop olist-drop1 olist<e0? olist<=e0? 0<olist<e0?
-  olist-length olist-map olist-map-kv olist-plus olist-ref-thunk
+  olist<=greatest-known? olist-length olist-map olist-map-kv olist-plus olist-ref-thunk
   olist-tails olist-transfinite-unfold olist-zero olist-zip-map)
 
 ; TODO: Document all of these exports.
@@ -67,37 +67,25 @@
 (provide
 
   onum-batch?
-  onum->onum-batch
-  part-and-rest->onum-batch
-  onum-batch-unknowable
-  onum-batch-plus
+  onum-batch-with-progress?
+  onum-batch-done
+  onum-batch-stuck
+  onum-batch-plus-onum
   onum-batch-plus1
-  (struct-out onum-batch-drop-result-done)
-  (struct-out onum-batch-drop-result-ready)
-  (struct-out onum-batch-drop-result-stalled)
-  onum-batch-drop-result?
   onum-batch-drop
-  (struct-out onum-batch-drop1-result-done)
-  (struct-out onum-batch-drop1-result-ready)
-  (struct-out onum-batch-drop1-result-stalled)
-  onum-batch-drop1-result?
   onum-batch-drop1
+  onum-batch-proceed
 
   olist-batch?
-  olist->olist-batch
-  part-and-rest->olist-batch
-  olist-batch-plus
+  olist-batch-with-progress?
+  olist-batch-length
+  olist-batch-done
+  olist-batch-stuck
+  olist-batch-plus-olist
   olist-batch-plus1
-  (struct-out olist-batch-drop-result-done)
-  (struct-out olist-batch-drop-result-ready)
-  (struct-out olist-batch-drop-result-stalled)
-  olist-batch-drop-result?
   olist-batch-drop
-  (struct-out olist-batch-drop1-result-done)
-  (struct-out olist-batch-drop1-result-ready)
-  (struct-out olist-batch-drop1-result-stalled)
-  olist-batch-drop1-result?
   olist-batch-drop1
+  olist-batch-proceed
   
   (rename-out [-onum-codata? onum-codata?])
   onum-batches/c
@@ -105,7 +93,7 @@
   onum->onum-codata
   onum-codata-unknowable
   onum-codata-plus1
-  onum-codata-plus
+  onum-codata-plus-onum
   onum-codata-drop1
   onum-codata-drop
   
@@ -114,7 +102,7 @@
   olist-batches->olist-codata
   olist->olist-codata olist-codata-build olist-codata-length
   olist-codata-plus1
-  olist-codata-plus
+  olist-codata-plus-olist
   olist-codata-drop1
   olist-codata-drop
   
@@ -131,6 +119,10 @@
   ; TODO: If we ever implement an `onum-log`, consider its analogous
   ; operations here as as well.
   
+  ; TODO: Uncomment the rest of this once we refactor it.
+  #;
+  (
+  
   ; TODO: See if we'll ever use `olist-codata-map-kv` -- or any of the
   ; others, for that matter.
   olist-codata-map olist-codata-map-kv olist-codata-zip-map
@@ -138,218 +130,333 @@
   olist-codata-transfinite-unfold-forever
   
   olist-codata-ref-maybe-thunk
+  )
 )
 
 
 
-(struct-easy (onum-batch-done onum) #:other #:mutable)
-(struct-easy (onum-batch-progress onum rest) #:other #:mutable)
+(struct-easy (onum-batch-rep-done onum) #:other #:mutable)
+(struct-easy (onum-batch-rep-stuck effect) #:other #:mutable)
+; NOTE: The `onum` argument should not be `0`. The `rest` argument
+; should not be an `onum-batch-rep-done` or `onum-batch-rep-plus`
+; value. This makes it easy to check whether the batch is stuck or
+; zero.
+(struct-easy (onum-batch-rep-plus onum rest) #:other #:mutable)
 
 (define/contract (onum-batch? v)
   (-> any/c boolean?)
-  (or (onum-batch-done? v) (onum-batch-progress? v)))
+  (or
+    (onum-batch-rep-done? v)
+    (onum-batch-rep-stuck? v)
+    (onum-batch-rep-plus? v)))
 
-(define/contract (onum->onum-batch n)
-  (-> onum<=e0? onum-batch?)
-  (onum-batch-done n))
+(define/contract (onum-batch-with-progress? v)
+  (-> any/c boolean?)
+  (and (onum-batch? v)
+  #/mat v (onum-batch-rep-done v) #t
+  #/mat v (onum-batch-rep-stuck effect) #f
+  #/dissect v (onum-batch-rep-plus a b) #t))
 
-(define/contract (part-and-rest->onum-batch n rest)
-  (-> 0<onum<e0? any/c onum-batch?)
-  (onum-batch-progress n rest))
+(define/contract (onum-batch-done n)
+  (-> onum<e0? onum-batch-with-progress?)
+  (onum-batch-rep-done n))
 
-(define/contract (onum-batch-unknowable)
-  (-> onum-batch?)
-  
-  ; NOTE: Because `onum-batch-drop` doesn't allow an `amount` of
-  ; epsilon zero, this result is indistinguishable from a truly
-  ; ordinal-unbounded result. See the note at `onum-batch-drop`
-  ; for the reason it doesn't allow that.
-  (onum->onum-batch #/onum-e0))
+(define/contract (onum-batch-stuck effect)
+  (-> any/c onum-batch?)
+  (onum-batch-rep-stuck effect))
 
-(define/contract (onum-batch-plus amount n)
+; NOTE:
+;
+; We don't allow batches to be added to batches. To append information
+; to the leaves of a tree data structure, we usually have to dig down
+; to the leaves and append it there. An `onum-batch` is supposed to be
+; a generalization of a unary number representation, so in order to
+; add onto the end of it, it's necessary to traverse it first. A stuck
+; batch can represent an ordinal number that we haven't even decided
+; *how* to traverse yet (as in, deciding how big a chunk we should try
+; to drop from it first).
+;
+; Deciding on a computation strategy that will traverse the whole
+; thing is like picking a sequence of ordinals we can use to postulate
+; the existence of an ordinal at their limit. If we haven't picked the
+; things we need to obtain the first ordinal we're adding, we can't
+; very well even *begin* to traverse successors and limits beyond that
+; to get to the sum we're computing.
+;
+; If we nevertheless tried to implement a system that allowed batches
+; to be added to batches, things would get tricky fast. We'd have to
+; deal with operations like dropping 3 from
+; `(onum-batch-plus (onum-batch-stuck 'foo) (onum-batch-done 100))`.
+; We can deduce this batch is at least as great as 100, so it should
+; be possible to drop 3, right? Should we end up with a batch that
+; represents "if `'foo` is finite, then `'foo` plus 97; otherwise
+; `'foo` plus 100"? If we did that, then once we got to doing the
+; corresponding thing for `olist-batch`, we'd have to represent a
+; dropped value of "if `'foo` has a length of 3 or greater, then the
+; first 3 elements of `'foo`, else all the elements of `'foo` plus the
+; first (3 - length of `'foo) elements of the 100-element `olist`."
+; That means we traverse part of this codata and we don't even get
+; data back, just more codata, (All right, the same could be said of
+; dropping infinite-ordinal-sized chunks from a stream, so maybe it's
+; fine.) Now we have to consider how *these* batches add together and
+; what we can deduce about them to do dropping operations. The full
+; scope of the effort this would entail isn't clear yet, and it isn't
+; clear it's worth it.
+;
+(define/contract (onum-batch-plus-onum amount n)
   (-> onum<e0? onum-batch? onum-batch?)
-  (mat n (onum-batch-done n)
-    (onum-batch-done #/onum-plus amount n)
-  #/dissect n (onum-batch-progress n rest)
-    (onum-batch-progress (onum-plus amount n) rest)))
+  
+  ; We don't use `onum-batch-rep-plus` if either argument is known to
+  ; be zero.
+  (mat amount 0 n
+  
+  #/mat n (onum-batch-rep-done n)
+    (onum-batch-rep-done #/onum-plus amount n)
+  #/mat n (onum-batch-rep-stuck effect)
+    (onum-batch-rep-plus amount n)
+  #/dissect n (onum-batch-rep-plus a b)
+    (onum-batch-rep-plus (onum-plus amount a) b)))
 
 (define/contract (onum-batch-plus1 n)
   (-> onum-batch? onum-batch?)
-  (onum-batch-plus 1 n))
+  (onum-batch-plus-onum 1 n))
 
-(struct-easy (onum-batch-drop-result-done remainder)
-  #:other #:mutable)
-(struct-easy (onum-batch-drop-result-ready batch)
-  #:other #:mutable)
-(struct-easy (onum-batch-drop-result-stalled remainder rest)
-  #:other #:mutable)
+(define/contract (onum-batch-drop on-stuck)
+  (->
+    (->
+      onum-batch?
+      onum-batch?
+      (-> any/c)
+      (-> onum-batch? any/c)
+      (-> onum-batch? any/c)
+      any/c)
+    (->
+      onum-batch?
+      onum-batch?
+      (-> any/c)
+      (-> onum-batch? any/c)
+      (-> onum-batch? any/c)
+      any/c))
+  (loopfn recur a b on-both-zero on-a-zero on-b-zero
+    (if
+      (not #/and
+        (onum-batch-with-progress? a)
+        (onum-batch-with-progress? b))
+      (on-stuck a b on-a-zero on-b-zero)
+    #/mat a (onum-batch-rep-plus aa ab)
+      (recur (onum-batch-rep-done aa) b
+        (fn #/on-b-zero ab)
+        (fn b #/recur ab b on-both-zero on-a-zero on-b-zero)
+        (dissectfn (onum-batch-rep-done aa)
+          (on-b-zero #/onum-batch-plus-onum aa ab)))
+    #/mat b (onum-batch-rep-plus ba bb)
+      (recur a (onum-batch-rep-done ba)
+        (fn #/on-a-zero bb)
+        (dissectfn (onum-batch-rep-done ba)
+          (on-a-zero #/onum-batch-plus-onum ba bb))
+        (fn a #/recur a bb on-both-zero on-a-zero on-b-zero))
+    #/dissect a (onum-batch-rep-done a)
+    #/dissect b (onum-batch-rep-done b)
+    #/mat (onum-drop a b) (just b)
+      (mat b 0
+        (on-both-zero)
+        (on-a-zero #/onum-batch-rep-done b))
+    #/dissect (onum-drop b a) (just a)
+      (on-b-zero #/onum-batch-rep-done a))))
 
-(define/contract (onum-batch-drop-result? v)
-  (-> any/c boolean?)
-  (or
-    (onum-batch-drop-result-done? v)
-    (onum-batch-drop-result-ready? v)
-    (onum-batch-drop-result-stalled? v)))
+(define/contract (onum-batch-drop1 on-stuck)
+  (->
+    (->
+      onum-batch?
+      (-> any/c)
+      (-> onum-batch? any/c)
+      (-> any/c)
+      any/c)
+    (->
+      onum-batch?
+      (-> any/c)
+      (-> onum-batch? any/c)
+      (-> any/c)
+      any/c))
+  (w- drop
+    (onum-batch-drop #/fn one b on-both-zero on-1-zero on-b-zero
+      (on-stuck b on-both-zero on-1-zero (fn #/on-b-zero one)))
+  #/fn b on-both-zero on-1-zero on-b-zero
+    (drop (onum-batch-rep-done 1) b
+      on-both-zero
+      on-1-zero
+      (fn one-zero #/on-b-zero))))
 
-; NOTE: We don't support an `amount` equal to epsilon zero here.
-; Although our ordinal-indexed streams are not necessarily bounded by
-; any ordinal (not necessarily even by an ordinal larger than epsilon
-; zero), the amount a single program can ever take from the stream is
-; still an ordinal. If a program takes from a single stream several
-; times, we want the program to be able to store all those results in
-; a single ordinal-indexed collection. So if it could take epsilon
-; zero elements twice, that would mean we would want our
-; ordinal-indexed collections to permit at least (2 * epsilon zero)
-; elements, and we don't support that yet.
-;
-(define/contract (onum-batch-drop amount n)
-  (-> onum<e0? onum-batch?
-    (or/c
-      (struct/c onum-batch-drop-result-done onum<e0?)
-      (struct/c onum-batch-drop-result-ready onum-batch?)
-      (struct/c onum-batch-drop-result-stalled onum<e0? any/c)))
-  (mat n (onum-batch-done n)
-    (mat (onum-drop amount n) (just n)
-      (onum-batch-drop-result-ready #/onum-batch-done n)
-    #/dissect (onum-drop n amount) (just remainder)
-    #/onum-batch-drop-result-done remainder)
-  #/dissect n (onum-batch-progress n rest)
-  #/mat (onum-drop n amount) (just amount)
-    (onum-batch-drop-result-stalled amount rest)
-  #/dissect (onum-drop amount n) (just n)
-  ; NOTE: At this point we know `n` is nonzero. If it were zero, we
-  ; would have entered the `onum-batch-drop-result-stalled` case.
-  #/onum-batch-drop-result-ready #/onum-batch-progress n rest))
-
-(struct-easy (onum-batch-drop1-result-done) #:other #:mutable)
-(struct-easy (onum-batch-drop1-result-ready batch) #:other #:mutable)
-(struct-easy (onum-batch-drop1-result-stalled rest) #:other #:mutable)
-
-(define/contract (onum-batch-drop1-result? v)
-  (-> any/c boolean?)
-  (or
-    (onum-batch-drop1-result-done? v)
-    (onum-batch-drop1-result-ready? v)
-    (onum-batch-drop1-result-stalled? v)))
-
-(define/contract (onum-batch-drop1 n)
-  (-> onum-batch?
-    (or/c
-      (struct/c onum-batch-drop1-result-done)
-      (struct/c onum-batch-drop1-result-ready onum-batch?)
-      (struct/c onum-batch-drop1-result-stalled any/c)))
-  (w- result (onum-batch-drop 1 n)
-  #/mat result (onum-batch-drop-result-done 0)
-    (onum-batch-drop1-result-done)
-  #/mat result (onum-batch-drop-result-ready batch)
-    (onum-batch-drop1-result-ready batch)
-  #/dissect result (onum-batch-drop-result-stalled 0 rest)
-    (onum-batch-drop1-result-stalled rest)))
+(define/contract (onum-batch-proceed effect-proceed)
+  (-> (-> any/c onum-batch?) (-> onum-batch? onum-batch?))
+  (loopfn recur n
+    (mat n (onum-batch-rep-done _)
+      n
+    #/mat n (onum-batch-rep-stuck effect)
+      (effect-proceed effect)
+    #/dissect n (onum-batch-rep-plus a b)
+      (onum-batch-rep-plus a (recur b)))))
 
 
 
-(struct-easy (olist-batch-done olist)
-  #:other #:mutable)
-(struct-easy (olist-batch-progress olist rest)
-  #:other #:mutable)
+(struct-easy (olist-batch-rep-done olist) #:other #:mutable)
+(struct-easy (olist-batch-rep-stuck effect) #:other #:mutable)
+; NOTE: The `olist` argument should not be `0`. The `rest` argument
+; should not be an `olist-batch-rep-done` or `olist-batch-rep-plus`
+; value. This makes it easy to check whether the batch is stuck or
+; zero.
+(struct-easy (olist-batch-rep-plus olist rest) #:other #:mutable)
 
 (define/contract (olist-batch? v)
   (-> any/c boolean?)
-  (or (olist-batch-done? v) (olist-batch-progress? v)))
+  (or
+    (olist-batch-rep-done? v)
+    (olist-batch-rep-stuck? v)
+    (olist-batch-rep-plus? v)))
 
-(define/contract (olist->olist-batch n)
-  (-> olist<=e0? olist-batch?)
-  (olist-batch-done n))
+(define/contract (olist-batch-with-progress? v)
+  (-> any/c boolean?)
+  (and (olist-batch? v)
+  #/mat v (olist-batch-rep-done v) #t
+  #/mat v (olist-batch-rep-stuck effect) #f
+  #/dissect v (olist-batch-rep-plus a b) #t))
 
-(define/contract (part-and-rest->olist-batch n rest)
-  (-> 0<olist<e0? any/c olist-batch?)
-  (olist-batch-progress n rest))
+(define/contract (olist-batch-done n)
+  (-> olist<e0? olist-batch-with-progress?)
+  (olist-batch-rep-done n))
 
-(define/contract (olist-batch-plus amount n)
+(define/contract (olist-batch-stuck effect)
+  (-> any/c olist-batch?)
+  (olist-batch-rep-stuck effect))
+
+(define/contract (olist-batch-length effect-length)
+  (-> (-> any/c onum-batch?) (-> olist-batch? onum-batch?))
+  (loopfn recur n
+    (mat n (olist-batch-rep-done n)
+      (onum-batch-rep-done #/olist-length n)
+    #/mat n (olist-batch-rep-stuck effect)
+      (effect-length effect)
+    #/dissect n (olist-batch-rep-plus a b)
+      (onum-batch-rep-plus (olist-length a) (recur b)))))
+
+; NOTE: See the note at `onum-batch-plus-onum` for the reason this
+; doesn't let us add two batches.
+(define/contract (olist-batch-plus-olist amount n)
   (-> olist<e0? olist-batch? olist-batch?)
-  (mat n (olist-batch-done n)
-    (olist-batch-done #/olist-plus amount n)
-  #/dissect n (olist-batch-progress n rest)
-    (olist-batch-progress (olist-plus amount n) rest)))
+  
+  ; We don't use `olist-batch-rep-plus` if either argument is known to
+  ; be zero.
+  (mat amount 0 n
+  
+  #/mat n (olist-batch-rep-done n)
+    (olist-batch-rep-done #/olist-plus amount n)
+  #/mat n (olist-batch-rep-stuck effect)
+    (olist-batch-rep-plus amount n)
+  #/dissect n (olist-batch-rep-plus a b)
+    (olist-batch-rep-plus (olist-plus amount a) b)))
 
 (define/contract (olist-batch-plus1 get-first n)
   (-> (-> any/c) olist-batch? olist-batch?)
-  (olist-batch-plus (olist-build 1 #/dissectfn _ #/get-first) n))
+  (olist-batch-plus-olist (olist-build 1 #/dissectfn _ #/get-first)
+    n))
 
-(struct-easy (olist-batch-drop-result-done dropped remainder)
-  #:other #:mutable)
-(struct-easy (olist-batch-drop-result-ready dropped batch)
-  #:other #:mutable)
-(struct-easy (olist-batch-drop-result-stalled dropped remainder rest)
-  #:other #:mutable)
+(define/contract (olist-batch-drop on-stuck)
+  (->
+    (->
+      olist-batch?
+      olist-batch?
+      (-> any/c)
+      (-> olist<=greatest-known? olist-batch? any/c)
+      (-> olist<=greatest-known? olist-batch? any/c)
+      any/c)
+    (->
+      olist-batch?
+      olist-batch?
+      (-> any/c)
+      (-> olist<=greatest-known? olist-batch? any/c)
+      (-> olist<=greatest-known? olist-batch? any/c)
+      any/c))
+  (loopfn recur a b on-both-zero on-a-zero on-b-zero
+    (if
+      (not #/and
+        (olist-batch-with-progress? a)
+        (olist-batch-with-progress? b))
+      (on-stuck a b on-a-zero on-b-zero)
+    #/mat a (olist-batch-rep-plus aa ab)
+      (recur (olist-batch-rep-done aa) b
+        (fn #/on-b-zero aa ab)
+        (fn b-dropped b-rest
+          (recur ab b-rest
+            on-both-zero
+            (fn b-dropped-2 b-rest
+              (on-a-zero (olist-plus b-dropped b-dropped-2) b-rest))
+            (fn ab-dropped ab-rest
+              (on-b-zero (olist-plus aa ab-dropped) ab-rest))))
+        (fn aa-dropped aa-rest
+          (dissect aa-rest (olist-batch-rep-done aa-rest)
+          #/on-b-zero
+            aa-dropped
+            (olist-batch-plus-olist aa-rest ab))))
+    #/mat b (olist-batch-rep-plus ba bb)
+      (recur a (olist-batch-rep-done ba)
+        (fn #/on-a-zero ba bb)
+        (fn ba-dropped ba-rest
+          (dissect ba-rest (olist-batch-rep-done ba-rest)
+          #/on-a-zero
+            ba-dropped
+            (olist-batch-plus-olist ba-rest bb)))
+        (fn a-dropped a-rest
+          (recur a-rest bb
+            on-both-zero
+            (fn bb-dropped bb-rest
+              (on-a-zero (olist-plus ba bb-dropped) bb-rest))
+            (fn a-dropped-2 a-rest
+              (on-b-zero (olist-plus a-dropped a-dropped-2)
+                a-rest)))))
+    #/dissect a (olist-batch-rep-done a)
+    #/dissect b (olist-batch-rep-done b)
+    #/mat (olist-drop (olist-length a) b) (just b-dropped-and-rest)
+      (dissect b-dropped-and-rest (list b-dropped b-rest)
+      #/mat (olist-length b-rest) 0
+        (on-both-zero)
+        (on-a-zero b-dropped #/olist-batch-rep-done b-rest))
+    #/dissect (olist-drop b a) (just a-dropped-and-rest)
+      (dissect a-dropped-and-rest (list a-dropped a-rest)
+      #/on-b-zero a-dropped #/olist-batch-rep-done a-rest))))
 
-(define/contract (olist-batch-drop-result? v)
-  (-> any/c boolean?)
-  (or
-    (olist-batch-drop-result-done? v)
-    (olist-batch-drop-result-ready? v)
-    (olist-batch-drop-result-stalled? v)))
+(define/contract (olist-batch-drop1 get-first on-stuck)
+  (->
+    (-> any/c)
+    (->
+      olist-batch?
+      (-> any/c)
+      (-> olist-batch? any/c)
+      (-> any/c)
+      any/c)
+    (->
+      olist-batch?
+      (-> any/c)
+      (-> olist-batch? any/c)
+      (-> any/c)
+      any/c))
+  (w- drop
+    (olist-batch-drop #/fn one b on-both-zero on-1-zero on-b-zero
+      (on-stuck b on-both-zero on-1-zero (fn #/on-b-zero one)))
+  #/fn b on-both-zero on-1-zero on-b-zero
+    (drop (olist-batch-rep-done 1 #/dissectfn _ #/get-first) b
+      on-both-zero
+      on-1-zero
+      (fn one-zero #/on-b-zero))))
 
-; NOTE: See the note at `onum-batch-drop` for the reason this doesn't
-; accept an `amount` of epsilon zero.
-(define/contract (olist-batch-drop amount n)
-  (-> onum<e0? olist-batch?
-    (or/c
-      (struct/c olist-batch-drop-result-done olist<e0? onum<e0?)
-      (struct/c olist-batch-drop-result-ready olist<e0? olist-batch?)
-      (struct/c olist-batch-drop-result-stalled
-        olist<e0? onum<e0? any/c)))
-  (mat n (olist-batch-done n)
-    (mat (olist-drop amount n) (just dropped-and-n)
-      (dissect dropped-and-n (list dropped n)
-      #/olist-batch-drop-result-ready dropped #/olist-batch-done n)
-    #/dissect (onum-drop (olist-length n) amount) (just remainder)
-    #/olist-batch-drop-result-done n remainder)
-  #/dissect n (olist-batch-progress n rest)
-  #/mat (onum-drop (olist-length n) amount) (just amount)
-    (olist-batch-drop-result-stalled n amount rest)
-  #/dissect (olist-drop amount n) (just #/list dropped n)
-  ; NOTE: At this point we know `n` is nonempty. If it were empty, we
-  ; would have entered the `olist-batch-drop-result-stalled` case.
-  #/olist-batch-drop-result-ready
-    dropped (olist-batch-progress n rest)))
-
-(struct-easy (olist-batch-drop1-result-overdrawn)
-  #:other #:mutable)
-(struct-easy (olist-batch-drop1-result-done dropped)
-  #:other #:mutable)
-(struct-easy (olist-batch-drop1-result-ready dropped batch)
-  #:other #:mutable)
-(struct-easy (olist-batch-drop1-result-stalled dropped rest)
-  #:other #:mutable)
-
-(define/contract (olist-batch-drop1-result? v)
-  (-> any/c boolean?)
-  (or
-    (olist-batch-drop1-result-overdrawn? v)
-    (olist-batch-drop1-result-done? v)
-    (olist-batch-drop1-result-ready? v)
-    (olist-batch-drop1-result-stalled? v)))
-
-(define/contract (olist-batch-drop1 n)
-  (-> olist-batch?
-    (or/c
-      (struct/c olist-batch-drop1-result-overdrawn)
-      (struct/c olist-batch-drop1-result-done (-> any/c))
-      (struct/c olist-batch-drop1-result-ready (-> any/c)
-        olist-batch?)
-      (struct/c olist-batch-drop1-result-stalled (-> any/c) any/c)))
-  (w- result (olist-batch-drop 1 n)
-  #/mat result (olist-batch-drop-result-done dropped remainder)
-    (mat remainder 1
-      (olist-batch-drop1-result-overdrawn)
-    #/olist-batch-drop1-result-done #/olist-ref-thunk dropped 0)
-  #/mat result (olist-batch-drop-result-ready dropped batch)
-    (olist-batch-drop1-result-ready (olist-ref-thunk dropped 0) batch)
-  #/dissect result (olist-batch-drop-result-stalled dropped 0 rest)
-    (olist-batch-drop1-result-stalled
-      (olist-ref-thunk dropped 0)
-      rest)))
+(define/contract (olist-batch-proceed effect-proceed)
+  (-> (-> any/c olist-batch?) (-> olist-batch? olist-batch?))
+  (loopfn recur n
+    (mat n (olist-batch-rep-done _)
+      n
+    #/mat n (olist-batch-rep-stuck effect)
+      (effect-proceed effect)
+    #/dissect n (olist-batch-rep-plus a b)
+      (olist-batch-rep-plus a (recur b)))))
 
 
 
@@ -365,12 +472,15 @@
   (-> contract?)
   (->
     (or/c
-      (struct/c onum-batch-done onum<=e0?)
-      (struct/c onum-batch-progress 0<onum<e0?
-        (recursive-contract #/onum-batches/c)))))
+      (struct/c onum-batch-rep-done onum<e0?)
+      (struct/c onum-batch-rep-stuck
+        (recursive-contract #/onum-batches/c))
+      (struct/c onum-batch-rep-plus 0<onum<e0?
+        (struct/c onum-batch-rep-stuck
+          (recursive-contract #/onum-batches/c))))))
 
 ; Given a thunk which contains an ordinal numeral batch, where the
-; "rest" of the batch is another such thunk, this returns an ordinal
+; `effect` of the batch is another such thunk, this returns an ordinal
 ; numeral computation that follows all those thunks.
 ;
 ; If the batches are actually infinite in number, it's recommended to
@@ -381,54 +491,85 @@
 ; the program to go into an infinite loop trying to compute all the
 ; batches.
 ;
+; TODO: The same will be true for `onum-codata-untimes` and
+; `onum-codata-log`, if and when we have those, at which point we'll
+; want to encourage growth of this style, for increasing `big-onum`
+; values:
+;
+;   (onum-batch-plus-onum big-onum
+;   #/onum-batch-times-onum big-onum
+;   #/onum-batch-pow-onum big-onum
+;     ...)
+;
 (define/contract (onum-batches->onum-codata batches)
   (-> (onum-batches/c) onum-codata?)
   (onum-codata batches))
 
 (define/contract (onum->onum-codata n)
-  (-> onum<=e0? onum-codata?)
-  (onum-codata #/fn #/onum->onum-batch n))
+  (-> onum<e0? onum-codata?)
+  (onum-codata #/fn #/onum-batch-done n))
 
 (define/contract (onum-codata-unknowable)
   (-> onum-codata?)
-  (onum-codata #/onum-batch-unknowable))
+  (onum-codata
+    (w-loop next big-onum (onum-omega)
+      (fn
+        ; TODO: If we ever have `onum-batch-times-onum` and
+        ; `onum-batch-pow-onum`, we should use them here like so:
+        ;
+        ;   (onum-batch-plus-onum big-onum
+        ;   #/onum-batch-times-onum big-onum
+        ;   #/onum-batch-pow-onum big-onum
+        ;     ...)
+        ;
+        ; That way, untimes and log operations will terminate.
+        ;
+        (onum-batch-plus-onum big-onum
+        #/onum-batch-stuck
+        #/next #/onum-pow (onum-omega) big-onum)))))
 
 (define/contract (onum-codata-plus1 n)
   (-> onum-codata? onum-codata?)
   (dissect n (onum-codata get-batch)
   #/onum-codata #/fn #/onum-batch-plus1 #/get-batch))
 
-(define/contract (onum-codata-plus amount n)
+(define/contract (onum-codata-plus-onum amount n)
   (-> onum<e0? onum-codata? onum-codata?)
   (dissect n (onum-codata get-batch)
-  #/onum-codata #/fn #/onum-batch-plus amount #/get-batch))
+  #/onum-codata #/fn #/onum-batch-plus-onum amount #/get-batch))
 
 (define/contract (onum-codata-drop1 n)
   (-> onum-codata? #/maybe/c onum-codata?)
   (dissect n (onum-codata get-batch)
-  #/w- result (onum-batch-drop1 #/get-batch)
-  #/mat result (onum-batch-drop1-result-done)
-    (nothing)
-  #/mat result (onum-batch-drop1-result-ready batch)
-    (just #/onum-codata #/fn batch)
-  #/dissect result (onum-batch-drop1-result-stalled rest)
-    (just #/onum-codata rest)))
+  #/w- drop
+    (w-loop drop []
+      (onum-batch-drop1 #/fn b on-both-zero on-1-zero on-b-zero
+        (dissect b (onum-batch-rep-stuck get-batch)
+        #/drop (get-batch) on-both-zero on-1-zero on-b-zero)))
+  #/drop (get-batch)
+    (fn #/just #/onum->onum-codata 0)
+    (fn result #/just result)
+    (fn #/nothing)))
 
-; NOTE: See the note at `onum-batch-drop` for the reason this doesn't
-; accept an `amount` of epsilon zero.
 (define/contract (onum-codata-drop amount n)
-  (-> onum<e0? onum-codata? #/maybe/c onum-codata?)
-  (dissect n (onum-codata get-batch)
-  #/w- result (onum-batch-drop amount #/get-batch)
-  #/mat result (onum-batch-drop-result-done remainder)
-    (expect remainder 0 (nothing)
-    #/just #/onum-codata #/fn #/onum->onum-batch 0)
-  #/mat result (onum-batch-drop-result-ready batch)
-    (just #/onum-codata #/fn batch)
-  #/dissect result (onum-batch-drop-result-stalled remainder rest)
-  #/mat remainder 0
-    (just #/onum-codata rest)
-  #/onum-codata-drop remainder #/onum-codata rest))
+  (-> onum-codata? onum-codata? #/maybe/c onum-codata?)
+  (dissect amount (onum-codata amount-get-batch)
+  #/dissect n (onum-codata n-get-batch)
+  #/w- drop
+    (w-loop drop []
+      (onum-codata-drop
+      #/fn amount n on-both-zero on-amount-zero on-n-zero
+        (w- unstick
+          (fn n
+            (mat n (onum-batch-rep-stuck n-get-batch)
+              (n-get-batch)
+              n))
+        #/drop (unstick amount) (unstick n)
+          on-both-zero on-amount-zero on-n-zero)))
+  #/drop (amount-get-batch) (n-get-batch)
+    (fn #/just #/onum->onum-codata 0)
+    (fn result #/just result)
+    (fn remainder #/nothing)))
 
 
 
@@ -444,13 +585,16 @@
   (-> contract?)
   (->
     (or/c
-      (struct/c olist-batch-done olist<=e0?)
-      (struct/c olist-batch-progress 0<olist<e0?
-        (recursive-contract #/olist-batches/c)))))
+      (struct/c olist-batch-rep-done olist<e0?)
+      (struct/c olist-batch-rep-stuck
+        (recursive-contract #/olist-batches/c))
+      (struct/c olist-batch-rep-plus 0<olist<e0?
+        (struct/c olist-batch-rep-stuck
+          (recursive-contract #/olist-batches/c))))))
 
-; Given a thunk which contains an ordinal-indexed stream batch, where
-; the "rest" of the batch is another such thunk, this returns an
-; ordinal-indexed stream that follows all those thunks.
+; Given a thunk which contains an ordinal numeral batch, where the
+; `effect` of the batch is another such thunk, this returns an ordinal
+; numeral computation that follows all those thunks.
 ;
 ; If the batches are actually infinite in number, it's recommended to
 ; have each batch increase in size to approach epsilon zero or another
@@ -460,16 +604,21 @@
 ; the program to go into an infinite loop trying to compute all the
 ; batches.
 ;
+; TODO: The same will be true for `olist-codata-untimes` and
+; `olist-codata-log`, if and when we have those, at which point we'll
+; want to encourage even stronger growth of batches as they go along.
+; See the notes at `onum-batches->onum-codata`.
+;
 (define/contract (olist-batches->olist-codata batches)
   (-> (olist-batches/c) olist-codata?)
   (olist-codata batches))
 
 (define/contract (olist->olist-codata n)
-  (-> olist<=e0? olist-codata?)
-  (olist-codata #/fn #/olist->olist-batch n))
+  (-> olist<e0? olist-codata?)
+  (olist-codata #/fn #/olist-batch-done n))
 
 ; NOTE: The arguments to `index->element` will all be ordinal numbers.
-; As of right now, all of those ordinals will satisfy `onum<=e0?`, but
+; As of right now, all of those ordinals will satisfy `onum<e0?`, but
 ; if and when future versions of this library add support for more
 ; ordinals, clients may find larger ordinals being passed to their
 ; `index->element` functions.
@@ -482,12 +631,14 @@
       get-lenbatch get-lenbatch index->element index->element
       (fn
         (w- lenbatch (get-lenbatch)
-        #/mat lenbatch (onum-batch-done n)
+        #/mat lenbatch (onum-batch-rep-done n)
           (olist-batch-done #/olist-build n index->element)
-        #/dissect lenbatch (onum-batch-progress n rest)
-          (olist-batch-progress (olist-build n index->element)
-            (get-lenbatch->get-batch rest #/fn index
-              (index->element #/onum-plus n index))))))))
+        #/mat lenbatch (onum-batch-rep-stuck effect)
+          (#/get-lenbatch->get-batch effect index->element)
+        #/dissect lenbatch (onum-batch-rep-plus a b)
+          (olist-batch-rep-plus (olist-build a index->element)
+            (get-lenbatch->get-batch b #/fn index
+              (index->element #/onum-plus a index))))))))
 
 (define/contract (olist-codata-length n)
   (-> olist-codata? onum-codata?)
@@ -496,63 +647,64 @@
     (w-loop get-batch->get-lenbatch get-batch get-batch
       (fn
         (w- batch (get-batch)
-        #/mat batch (olist-batch-done n)
-          (onum-batch-done #/olist-length n)
-        #/dissect batch (olist-batch-progress n rest)
-          (onum-batch-progress (olist-length n)
-            (get-batch->get-lenbatch rest)))))))
+        #/mat batch (olist-batch-rep-done n)
+          (onum-batch-rep-done #/olist-length n)
+        #/mat batch (olist-batch-rep-stuck effect)
+          (#/get-batch->get-lenbatch effect)
+        #/dissect batch (olist-batch-rep-plus a b)
+          (onum-batch-rep-plus (olist-length a)
+            (get-batch->get-lenbatch b)))))))
 
 (define/contract (olist-codata-plus1 get-first n)
   (-> (-> any/c) olist-codata? olist-codata?)
   (dissect n (olist-codata get-batch)
   #/olist-codata #/fn #/olist-batch-plus1 get-first #/get-batch))
 
-(define/contract (olist-codata-plus amount n)
+(define/contract (olist-codata-plus-olist amount n)
   (-> olist<e0? olist-codata? olist-codata?)
   (dissect n (olist-codata get-batch)
-  #/olist-codata #/fn #/olist-batch-plus amount #/get-batch))
+  #/olist-codata #/fn #/olist-batch-plus-olist amount #/get-batch))
 
 (define/contract (olist-codata-drop1 n)
   (-> olist-codata? #/maybe/c #/list/c (-> any/c) olist-codata?)
   (dissect n (olist-codata get-batch)
-  #/dissect (olist-batch-drop1 #/get-batch) (list dropped result)
-  #/mat result (olist-batch-drop1-result-overdrawn)
-    (nothing)
-  #/mat result (olist-batch-drop1-result-done get-first)
-    (just #/list get-first
-      (olist-codata #/fn #/olist->olist-batch #/olist-zero))
-  #/mat result (olist-batch-drop1-result-ready get-first batch)
-    (just #/list get-first #/olist-codata #/fn batch)
-  #/dissect result (olist-batch-drop1-result-stalled get-first rest)
-    (just #/list get-first #/olist-codata rest)))
+  #/w- drop
+    (w-loop drop []
+      (olist-batch-drop1 #/fn b on-both-zero on-1-zero on-b-zero
+        (dissect b (olist-batch-rep-stuck get-batch)
+        #/drop (get-batch) on-both-zero on-1-zero on-b-zero)))
+  #/drop (get-batch)
+    (fn get-first #/just #/list get-first #/olist-zero)
+    (fn get-first result #/just #/list get-first result)
+    (fn #/nothing)))
 
-; NOTE: See the note at `onum-batch-drop` for the reason this doesn't
-; accept an `amount` of epsilon zero.
 (define/contract (olist-codata-drop amount n)
-  (-> onum<e0? olist-codata?
+  (-> olist-codata? olist-codata?
     (maybe/c #/list/c olist<e0? olist-codata?))
-  (w-loop next dropped-so-far (olist-zero) amount amount n n
-    (dissect n (olist-codata get-batch)
-    #/w- result (olist-batch-drop amount #/get-batch)
-    #/mat result (olist-batch-drop-result-done dropped remainder)
-      (expect remainder 0 (nothing)
-      #/just #/list (olist-plus dropped-so-far dropped)
-        (olist-codata #/fn #/olist->olist-batch #/olist-zero))
-    #/mat result (olist-batch-drop-result-ready dropped batch)
-      (just #/list (olist-plus dropped-so-far dropped)
-        (olist-codata #/fn batch))
-    #/dissect result
-      (olist-batch-drop-result-stalled dropped remainder rest)
-      (mat remainder 0
-        (just (olist-plus dropped-so-far dropped) #/olist-codata rest)
-        (next
-          ; TODO: See if the way we're concatenating the
-          ; `dropped-so-far` entries is a painter's algorithm. What we
-          ; should probably do is to make `olist-rep-plus` use a
-          ; catenable deque data structure for all the summands.
-          (olist-plus dropped-so-far dropped)
-          remainder
-          (olist-codata rest))))))
+  (dissect amount (olist-codata amount-get-batch)
+  #/dissect n (olist-codata n-get-batch)
+  #/w- drop
+    (w-loop drop []
+      (olist-codata-drop
+      #/fn amount n on-both-zero on-amount-zero on-n-zero
+        (w- unstick
+          (fn n
+            (mat n (olist-batch-rep-stuck n-get-batch)
+              (n-get-batch)
+              n))
+        #/drop (unstick amount) (unstick n)
+          on-both-zero on-amount-zero on-n-zero)))
+  #/drop (amount-get-batch) (n-get-batch)
+    (fn #/just #/list n (olist-zero))
+    (fn n-dropped n-rest #/just #/list n-dropped n-rest)
+    (fn amount-dropped amount-rest #/nothing)))
+
+
+; TODO: We're in the process of refactoring the way we model all these
+; data/codata structures. Uncomment the rest of this once we finish
+; refactoring it.
+#;
+(
 
 (define (onum-batches-fold state get-batch func)
   (fn
@@ -631,7 +783,7 @@
               ; rest.
               (dissect
                 (on-big-rest #/olist-codata #/fn
-                  (olist-batch-plus big-list get-big-batch))
+                  (olist-batch-plus-olist big-list get-big-batch))
                 (olist-codata get-batch)
                 get-batch)
             ; Otherwise, we can make at least some nonzero amount of
@@ -642,9 +794,10 @@
             #/olist-batch-progress
               (olist-zip-map small-list big-list #/fn small big
                 (on-elems-small-big small big))
-              (next
-                get-small-batch
-                (fn #/olist-batch-plus big-rest #/get-big-batch))))
+              (next get-small-batch
+                (fn
+                  (olist-batch-plus-olist big-rest
+                  #/get-big-batch)))))
         #/w- comparison (onum-compare an bn)
         #/mat comparison '<
           (process-inequal
@@ -668,7 +821,7 @@
   #/fn state n rest
     (list state
       (olist-map (olist-tails n) #/fn olist-tail
-        (olist-codata-plus olist-tail rest)))))
+        (olist-codata-plus-olist olist-tail rest)))))
 
 ; Given an element thunk to put at position zero, a function to
 ; produce an element thunk at a successor position from the element
@@ -701,3 +854,5 @@
   (maybe-bind (olist-codata-drop i n) #/dissectfn (list dropped n)
   #/maybe-bind (olist-codata-drop1 n) #/dissectfn (list get-first n)
   #/just get-first))
+
+)
