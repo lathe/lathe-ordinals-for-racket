@@ -38,8 +38,8 @@
 ; TODO: Document all of these exports.
 (provide
   onum<=greatest-known?
-  onum<=e0? onum<e0? 0<onum<e0?
-  onum<=omega? onum<omega? 0<onum<omega?
+  onum<=e0? onum<e0? 0<onum<=e0? 0<onum<e0?
+  onum<=omega? onum<omega? 0<onum<=omega? 0<onum<omega?
   
   ; TODO: Decide whether to provide these. Maybe provide this
   ; functionality in another way, like a logarithm operation.
@@ -115,6 +115,10 @@
 (define/contract (0<onum<e0? v)
   (-> any/c boolean?)
   (and (onum<e0? v) (not #/equal? 0 v)))
+
+(define/contract (0<onum<=e0? v)
+  (-> any/c boolean?)
+  (and (onum<=e0? v) (not #/equal? 0 v)))
 
 ; Returns whether the given value is recognized as an ordinal number
 ; by this library at all. Currently, these only go up to (and include)
@@ -244,9 +248,13 @@
   (-> any/c boolean?)
   (natural? v))
 
+(define/contract (0<onum<=omega? v)
+  (-> any/c boolean?)
+  (and (onum<=omega? v) (not #/equal? 0 v)))
+
 (define/contract (0<onum<omega? v)
   (-> any/c boolean?)
-  (and (onum<omega? v) (not (equal? 0 v))))
+  (and (onum<omega? v) (not #/equal? 0 v)))
 
 ; NOTE: This is just like `onum-e0` except for its interaction with
 ; `struct-constructor-procedure?`.
