@@ -21,17 +21,20 @@
 
 
 (require #/only-in racket/contract/base
-  *list/c -> ->* ->i any/c list/c listof or/c)
+  *list/c -> ->* ->i any/c contract-out list/c listof or/c)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define/generic define-generics)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
+(require #/only-in lathe-comforts/match
+  define-match-expander-attenuated)
 (require #/only-in lathe-comforts/maybe
   just maybe/c maybe-map nothing)
 (require #/only-in lathe-comforts/list
   list-foldl list-foldr nat->maybe)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in lathe-ordinals
   0<onum<e0? onum<=? onum<? onum</c onum<=e0? onum<=greatest-known?
@@ -40,8 +43,11 @@
 
 ; TODO: Document all of these exports.
 (provide
-  olist<=greatest-known?
-  olist<=e0? olist<e0? 0<olist<e0?
+  (contract-out
+    [olist<=greatest-known? (-> any/c boolean?)]
+    [olist<=e0? (-> any/c boolean?)]
+    [olist<e0? (-> any/c boolean?)]
+    [0<olist<e0? (-> any/c boolean?)])
   ; TODO: Consider providing `list->olist` and `olist->maybe-list`
   ; operations.
   olist-zero olist-build olist-length
@@ -82,16 +88,11 @@
   (olist-rep-drop1 olist-rep)
   (olist-rep-drop amount olist-rep))
 
-(struct-easy (olist rep)
-  (#:guard-easy
-    (unless (olist-rep? rep)
-      (error "Expected rep to be an olist-rep"))))
+(define-imitation-simple-struct (olist<=e0? olist-rep) unguarded-olist
+  'olist (current-inspector) (auto-write))
 
-; NOTE: This is just like `olist?` except for its interaction with
-; `struct-predicate-procedure?`.
-(define/contract (olist<=e0? v)
-  (-> any/c boolean?)
-  (olist? v))
+(define-match-expander-attenuated olist
+  unguarded-olist [rep olist-rep?] #t)
 
 ; Returns whether the given value is recognized as an ordinal-bounded
 ; list by this library at all. Currently, these only go up to (and
@@ -105,8 +106,7 @@
 ; client will have to handle these by treating them as
 ; indistinguishable values.)
 ;
-(define/contract (olist<=greatest-known? v)
-  (-> any/c boolean?)
+(define (olist<=greatest-known? v)
   (olist<=e0? v))
 
 (define/contract (olist-length lst)
@@ -114,12 +114,10 @@
   (dissect lst (olist rep)
   #/olist-rep-length rep))
 
-(define/contract (olist<e0? v)
-  (-> any/c boolean?)
+(define (olist<e0? v)
   (and (olist<=e0? v) (onum<e0? #/olist-length v)))
 
-(define/contract (0<olist<e0? v)
-  (-> any/c boolean?)
+(define (0<olist<e0? v)
   (and (olist<e0? v) (0<onum<e0? #/olist-length v)))
 
 (define/contract (olist-drop1 lst)

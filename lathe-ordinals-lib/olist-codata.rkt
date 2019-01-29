@@ -41,14 +41,17 @@
 
 
 (require #/only-in racket/contract/base
-  -> any/c contract? list/c or/c recursive-contract struct/c)
+  -> any/c contract? contract-out list/c or/c)
 (require #/only-in racket/contract/region define/contract)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn loopfn mat w- w-loop)
+(require #/only-in lathe-comforts/contract fix/c)
+(require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
   just maybe-bind maybe/c nothing)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-write define-imitation-simple-struct)
 (require #/only-in lathe-comforts/trivial trivial)
 
 (require #/only-in lathe-ordinals
@@ -61,10 +64,6 @@
   olist-zero olist-zip-map)
 
 ; TODO: Document all of these exports.
-;
-; TODO: Stop making almost all our structs mutable. We're only doing
-; that for `struct/c`.
-;
 (provide
 
   onum-batch?
@@ -88,7 +87,8 @@
   olist-batch-drop1
   olist-batch-proceed
   
-  (rename-out [-onum-codata? onum-codata?])
+  (contract-out
+    [onum-codata? (-> any/c boolean?)])
   onum-batches/c
   onum-batches->onum-codata
   onum->onum-codata
@@ -98,7 +98,8 @@
   onum-codata-drop1
   onum-codata-drop
   
-  (rename-out [-olist-codata? olist-codata?])
+  (contract-out
+    [olist-codata? (-> any/c boolean?)])
   olist-batches/c
   olist-batches->olist-codata
   olist->olist-codata olist-codata-build olist-codata-length
@@ -131,13 +132,23 @@
 
 
 
-(struct-easy (onum-batch-rep-done onum) #:other #:mutable)
-(struct-easy (onum-batch-rep-stuck effect) #:other #:mutable)
-; NOTE: The `onum` argument should not be `0`. The `rest` argument
-; should not be an `onum-batch-rep-done` or `onum-batch-rep-plus`
-; value. This makes it easy to check whether the batch is stuck or
-; zero.
-(struct-easy (onum-batch-rep-plus onum rest) #:other #:mutable)
+(define-imitation-simple-struct
+  (onum-batch-rep-done? onum-batch-rep-done-onum)
+  onum-batch-rep-done
+  'onum-batch-rep-done (current-inspector) (auto-write))
+(define-imitation-simple-struct
+  (onum-batch-rep-stuck? onum-batch-rep-stuck-effect)
+  onum-batch-rep-stuck
+  'onum-batch-rep-stuck (current-inspector) (auto-write))
+; NOTE: The `onum-batch-rep-plus-onum` argument should not be `0`. The
+; `onum-batch-rep-plus-rest` argument should not be an
+; `onum-batch-rep-done` or `onum-batch-rep-plus` value. This makes it
+; easy to check whether the batch is stuck or zero.
+(define-imitation-simple-struct
+  (onum-batch-rep-plus?
+    onum-batch-rep-plus-onum onum-batch-rep-plus-rest)
+  onum-batch-rep-plus
+  'onum-batch-rep-plus (current-inspector) (auto-write))
 
 (define/contract (onum-batch? v)
   (-> any/c boolean?)
@@ -295,13 +306,23 @@
 
 
 
-(struct-easy (olist-batch-rep-done olist) #:other #:mutable)
-(struct-easy (olist-batch-rep-stuck effect) #:other #:mutable)
-; NOTE: The `olist` argument should not be `0`. The `rest` argument
-; should not be an `olist-batch-rep-done` or `olist-batch-rep-plus`
-; value. This makes it easy to check whether the batch is stuck or
-; zero.
-(struct-easy (olist-batch-rep-plus olist rest) #:other #:mutable)
+(define-imitation-simple-struct
+  (olist-batch-rep-done? olist-batch-rep-done-olist)
+  olist-batch-rep-done
+  'olist-batch-rep-done (current-inspector) (auto-write))
+(define-imitation-simple-struct
+  (olist-batch-rep-stuck? olist-batch-rep-stuck-effect)
+  olist-batch-rep-stuck
+  'olist-batch-rep-stuck (current-inspector) (auto-write))
+; NOTE: The `olist-batch-rep-plus-olist` argument should not have
+; length `0`. The `olist-batch-rep-plus-rest` argument should not be
+; an `olist-batch-rep-done` or `olist-batch-rep-plus` value. This
+; makes it easy to check whether the batch is stuck or zero.
+(define-imitation-simple-struct
+  (olist-batch-rep-plus?
+    olist-batch-rep-plus-olist olist-batch-rep-plus-rest)
+  olist-batch-rep-plus
+  'olist-batch-rep-plus (current-inspector) (auto-write))
 
 (define/contract (olist-batch? v)
   (-> any/c boolean?)
@@ -439,7 +460,9 @@
     (olist-batch-drop #/fn one b on-both-zero on-1-zero on-b-zero
       (on-stuck b on-both-zero on-1-zero (fn #/on-b-zero one)))
   #/fn b on-both-zero on-1-zero on-b-zero
-    (drop (olist-batch-rep-done 1 #/dissectfn _ #/get-first) b
+    (drop
+      (olist-batch-rep-done #/olist-build 1 #/dissectfn _ #/get-first)
+      b
       on-both-zero
       on-1-zero
       (fn one-zero #/on-b-zero))))
@@ -456,24 +479,16 @@
 
 
 
-(struct-easy (onum-codata get-batch))
-
-; NOTE: This is just like `onum-codata?` except for its interaction
-; with `struct-predicate-procedure?`.
-(define/contract (-onum-codata? x)
-  (-> any/c boolean?)
-  (onum-codata? x))
+(define-imitation-simple-struct (onum-codata? onum-codata-get-batch)
+  onum-codata 'onum-codata (current-inspector) (auto-write))
 
 (define/contract (onum-batches/c)
   (-> contract?)
-  (->
-    (or/c
-      (struct/c onum-batch-rep-done onum<e0?)
-      (struct/c onum-batch-rep-stuck
-        (recursive-contract #/onum-batches/c))
-      (struct/c onum-batch-rep-plus 0<onum<e0?
-        (struct/c onum-batch-rep-stuck
-          (recursive-contract #/onum-batches/c))))))
+  (fix/c onum-batches/c #/-> #/or/c
+    (match/c onum-batch-rep-done onum<e0?)
+    (match/c onum-batch-rep-stuck onum-batches/c)
+    (match/c onum-batch-rep-plus 0<onum<e0?
+      (match/c onum-batch-rep-stuck onum-batches/c))))
 
 ; Given a thunk which contains an ordinal numeral batch, where the
 ; `effect` of the batch is another such thunk, this returns an ordinal
@@ -595,24 +610,16 @@
 
 
 
-(struct-easy (olist-codata get-batch))
-
-; NOTE: This is just like `olist-codata?` except for its interaction
-; with `struct-predicate-procedure?`.
-(define/contract (-olist-codata? x)
-  (-> any/c boolean?)
-  (olist-codata? x))
+(define-imitation-simple-struct (olist-codata? olist-codata-get-batch)
+  olist-codata 'olist-codata (current-inspector) (auto-write))
 
 (define/contract (olist-batches/c)
   (-> contract?)
-  (->
-    (or/c
-      (struct/c olist-batch-rep-done olist<e0?)
-      (struct/c olist-batch-rep-stuck
-        (recursive-contract #/olist-batches/c))
-      (struct/c olist-batch-rep-plus 0<olist<e0?
-        (struct/c olist-batch-rep-stuck
-          (recursive-contract #/olist-batches/c))))))
+  (fix/c olist-batches/c #/-> #/or/c
+    (match/c olist-batch-rep-done olist<e0?)
+    (match/c olist-batch-rep-stuck olist-batches/c)
+    (match/c olist-batch-rep-plus 0<olist<e0?
+      (match/c olist-batch-rep-stuck olist-batches/c))))
 
 ; Given a thunk which contains an ordinal numeral batch, where the
 ; `effect` of the batch is another such thunk, this returns an ordinal

@@ -22,18 +22,24 @@
 
 
 (require #/only-in racket/contract/base
-  *list/c -> ->* and/c any/c flat-contract? list/c listof or/c)
+  *list/c -> ->* and/c any/c contract-out flat-contract? list/c listof
+  or/c)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/list add-between)
 (require #/only-in racket/math natural?)
+(require #/only-in racket/struct make-constructor-style-printer)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
+(require #/only-in lathe-comforts/match
+  define-match-expander-attenuated
+  define-match-expander-from-match-and-make)
 (require #/only-in lathe-comforts/maybe
   just maybe/c maybe-map nothing)
 (require #/only-in lathe-comforts/list
   list-each list-foldl list-foldr list-map nat->maybe)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-equal auto-write define-imitation-simple-struct)
 
 ; TODO: Document all of these exports.
 (provide
@@ -49,7 +55,9 @@
   
   onum-compare onum<? onum>? onum<=? onum>=? onum</c onum<=/c
   onum-min-list onum-min onum-max-list onum-max
-  onum-omega (rename-out [-onum-e0 onum-e0])
+  onum-omega
+  (contract-out
+    [onum-e0 (-> onum<=e0?)])
   onum-plus1
   onum-plus-list onum-plus
   onum-drop1
@@ -65,13 +73,36 @@
 
 ; Epsilon zero, the first ordinal that can't be expressed in
 ; Cantor normal form.
-(struct-easy (onum-e0) #:equal)
+(define-imitation-simple-struct (onum-e0?) onum-e0
+  'onum-e0 (current-inspector) (auto-write) (auto-equal))
 
 ; The ordinals greater than or equal to omega (the first infinite
 ; ordinal) and less than epsilon zero, represented in Cantor normal
 ; form.
-(struct-easy (onum-cnf base-omega-expansion) #:equal
-  (#:guard-easy
+(define-imitation-simple-struct
+  (onum-cnf? onum-cnf-base-omega-expansion)
+  unguarded-onum-cnf
+  'onum-cnf (current-inspector) (auto-equal)
+  (#:prop prop:custom-write #/make-constructor-style-printer
+    (fn self 'onum-cnf)
+    (fn self
+      (expect self (onum-cnf base-omega-expansion)
+        (error "Expected self to be an onum-cnf")
+      #/list #/apply string-append #/add-between
+        (list-map base-omega-expansion
+        #/dissectfn (list power coefficient)
+          (mat power 0 (number->string coefficient)
+          #/string-append
+            "omega"
+            (mat power 1 ""
+            #/string-append "^" #/number->string power)
+            (mat coefficient 1 ""
+            #/string-append " * " #/number->string coefficient)))
+        " + "))))
+
+(define-match-expander-attenuated attenuated-onum-cnf
+  unguarded-onum-cnf [base-omega-expansion any/c]
+  (begin0 #t
     (unless (list? base-omega-expansion)
       (error "Expected base-omega-expansion to be a list"))
     (mat base-omega-expansion (list)
@@ -87,22 +118,10 @@
         (error "Expected each coefficient to be an exact positive integer")
       #/expect (onum<? power prev-power) #t
         (error "Expected each power to be strictly less than the last")
-        power)))
-  #:write
-  (fn this
-    (expect this (onum-cnf base-omega-expansion)
-      (error "Expected this to be an onum-cnf")
-    #/list #/apply string-append #/add-between
-      (list-map base-omega-expansion
-      #/dissectfn (list power coefficient)
-        (mat power 0 (number->string coefficient)
-        #/string-append
-          "omega"
-          (mat power 1 ""
-          #/string-append "^" #/number->string power)
-          (mat coefficient 1 ""
-          #/string-append " * " #/number->string coefficient)))
-      " + ")))
+        power))))
+
+(define-match-expander-from-match-and-make
+  onum-cnf unguarded-onum-cnf attenuated-onum-cnf attenuated-onum-cnf)
 
 (define/contract (onum<e0? v)
   (-> any/c boolean?)
@@ -255,12 +274,6 @@
 (define/contract (0<onum<omega? v)
   (-> any/c boolean?)
   (and (onum<omega? v) (not #/equal? 0 v)))
-
-; NOTE: This is just like `onum-e0` except for its interaction with
-; `struct-constructor-procedure?`.
-(define/contract (-onum-e0)
-  (-> onum<=e0?)
-  (onum-e0))
 
 ; This is increment by way of addition on the left. We're finding
 ; `(onum-plus 1 n)`.
