@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Install Racket '${{ matrix.racket-version }}'
-        uses: Bogdanp/setup-racket@v0.11
+        uses: Bogdanp/setup-racket@v1.1
         with:
           architecture: x64
           distribution: full
