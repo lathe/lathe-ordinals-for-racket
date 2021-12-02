@@ -1,6 +1,6 @@
 # Lathe Ordinals for Racket
 
-[![Travis build](https://travis-ci.org/lathe/lathe-ordinals-for-racket.svg?branch=main)](https://travis-ci.org/lathe/lathe-ordinals-for-racket)
+[![CI](https://github.com/lathe/lathe-ordinals-for-racket/actions/workflows/ci.yml/badge.svg)](https://github.com/lathe/lathe-ordinals-for-racket/actions/workflows/ci.yml)
 
 Lathe Ordinals for Racket provides data structures and utilities for managing ordinal numbers. Ordinal numbers are good for representing things that go on forever, and then some, and then keep going on forever again... and then a little more....
 
