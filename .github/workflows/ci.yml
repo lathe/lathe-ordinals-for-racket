@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       package: lathe-ordinals
+    steps:
+      - name: Initialize variables
+        run: "true"
   test:
     needs: vars
     runs-on: ubuntu-latest
