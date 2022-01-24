@@ -7,9 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       package: lathe-ordinals
-      raco-install: >
-        raco pkg install --auto --update-deps --no-docs --skip-installed
-          --batch
     steps:
       - name: Initialize variables
         run: "true"
@@ -68,7 +65,18 @@ jobs:
             ${{ runner.os }}-\
             ${{ hashFiles('.racket-version') }}-\
             ${{ matrix.racket-catalogs-id }}"
-
+      
+      # We uninstall the packages if they're already installed. This
+      # can happen if the GitHub Actions cache is already populated with
+      # them.
+      - name: Uninstall `${{ needs.vars.outputs.package }}{,-test,-doc,-lib}`
+        run: |
+          raco pkg remove --ignore-uninstalled --no-docs --batch \
+            ${{ needs.vars.outputs.package }} \
+            ${{ needs.vars.outputs.package }}-test \
+            ${{ needs.vars.outputs.package }}-doc \
+            ${{ needs.vars.outputs.package }}-lib
+      
       # We install each package directory as a linked package, and we
       # automatically fetch all the dependencies. We don't build the
       # docs yet; we'll do that later when we're recompiling the
@@ -80,13 +88,13 @@ jobs:
       # index.
       #
       - name: Install `${{ matrix.package }}-lib` and its dependencies
-        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-lib/"
+        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-lib/"
       - name: Install `${{ needs.vars.outputs.package }}-doc` and its dependencies
-        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-doc/"
+        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-doc/"
       - name: Install `${{ needs.vars.outputs.package }}-test` and its dependencies
-        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-test/"
+        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-test/"
       - name: Install `${{ needs.vars.outputs.package }}` and its dependencies
-        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}/"
+        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}/"
 
       # We recompile the collection (the single collection which all
       # these packages populate) and check that the package
