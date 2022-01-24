@@ -9,18 +9,47 @@ jobs:
       matrix:
         racket-variant: ["BC", "CS"]
         racket-version: ["8.3", "stable", "current"]
+        racket-catalogs-id: ["pkgs"]
+        racket-catalogs: [""]
         include:
+          # We build once against racksnaps (https://racksnaps.defn.io/)
+          # so that it's easier to track down working dependency
+          # versions. This is essentially our package-lock.json or
+          # Cargo.lock information.
+          #
+          - racket-variant: "CS"
+            racket-version: "8.3"
+            racket-catalogs-id: "racksnaps"
+            racket-catalogs: |
+              https://download.racket-lang.org/releases/8.3/catalog/,
+              https://racksnaps.defn.io/snapshots/2022/01/23/catalog/
           - package: lathe-ordinals
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      
+      # This is based on
+      # https://github.com/Bogdanp/setup-racket-cache-example
+      - name: Obtain cached Racket packages, if available
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/racket
+            ~/.local/share/racket
+          key: "\
+            ${{ runner.os }}-\
+            ${{ matrix.racket-variant }}-\
+            ${{ matrix.racket-version }}-\
+            ${{ matrix.racket-catalogs-id }}"
+      
       - name: Install Racket '${{ matrix.racket-version }}'
-        uses: Bogdanp/setup-racket@v1.1
+        uses: Bogdanp/setup-racket@v1.7
         with:
           architecture: x64
           distribution: full
           variant: ${{ matrix.racket-variant }}
           version: ${{ matrix.racket-version }}
+          catalogs: ${{ matrix.racket-catalogs }}
 
       # We install each package directory as a linked package, and we
       # automatically fetch all the dependencies. We don't build the
