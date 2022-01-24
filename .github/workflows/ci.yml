@@ -22,7 +22,7 @@ jobs:
             racket-catalogs-id: "racksnaps"
             racket-catalogs: |
               https://download.racket-lang.org/releases/8.3/catalog/,
-              https://racksnaps.defn.io/snapshots/2022/01/23/catalog/
+              https://racksnaps.defn.io/built-snapshots/2022/01/23/catalog/
           - package: lathe-ordinals
     steps:
       - name: Checkout
@@ -30,6 +30,8 @@ jobs:
       
       # This is based on
       # https://github.com/Bogdanp/setup-racket-cache-example
+      - name: Record the Racket version
+       run: racket --version > .racket-version
       - name: Obtain cached Racket packages, if available
         uses: actions/cache@v2
         with:
@@ -38,8 +40,7 @@ jobs:
             ~/.local/share/racket
           key: "\
             ${{ runner.os }}-\
-            ${{ matrix.racket-variant }}-\
-            ${{ matrix.racket-version }}-\
+            ${{ hashFiles(".racket-version") }}-\
             ${{ matrix.racket-catalogs-id }}"
       
       - name: Install Racket '${{ matrix.racket-version }}'
