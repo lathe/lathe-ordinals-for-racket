@@ -54,7 +54,7 @@ jobs:
       # This is based on
       # https://github.com/Bogdanp/setup-racket-cache-example
       - name: Record the Racket version
-        run: racket --version > .racket-version
+        run: racket --version | tee .racket-version
       - name: Obtain cached Racket packages, if available
         uses: actions/cache@v2
         with:
