@@ -28,6 +28,7 @@ jobs:
         id: vars
         outputs:
           package: lathe-ordinals
+        run: "true"
       
       - name: Checkout
         uses: actions/checkout@v2
