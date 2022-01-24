@@ -51,6 +51,13 @@ jobs:
           variant: ${{ matrix.racket-variant }}
           version: ${{ matrix.racket-version }}
           catalogs: ${{ matrix.racket-catalogs }}
+          
+          # This is based on
+          # https://github.com/soegaard/sketching/blob/bc24517203d5cae9019ee18491bb076b7299bbef/.github/workflows/push.yml
+          # and we're using it so that it's possible to set the
+          # catalogs without getting a permission error.
+          dest: '"${HOME}/racketdist"'
+          sudo: never
 
       # We install each package directory as a linked package, and we
       # automatically fetch all the dependencies. We don't build the
