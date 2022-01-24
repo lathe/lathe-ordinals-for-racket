@@ -28,21 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       
-      # This is based on
-      # https://github.com/Bogdanp/setup-racket-cache-example
-      - name: Record the Racket version
-        run: racket --version > .racket-version
-      - name: Obtain cached Racket packages, if available
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/racket
-            ~/.local/share/racket
-          key: "\
-            ${{ runner.os }}-\
-            ${{ hashFiles('.racket-version') }}-\
-            ${{ matrix.racket-catalogs-id }}"
-      
       - name: Install Racket '${{ matrix.racket-version }}'
         uses: Bogdanp/setup-racket@v1.7
         with:
@@ -58,6 +43,21 @@ jobs:
           # catalogs without getting a permission error.
           dest: '"${HOME}/racketdist"'
           sudo: never
+      
+      # This is based on
+      # https://github.com/Bogdanp/setup-racket-cache-example
+      - name: Record the Racket version
+        run: racket --version > .racket-version
+      - name: Obtain cached Racket packages, if available
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/racket
+            ~/.local/share/racket
+          key: "\
+            ${{ runner.os }}-\
+            ${{ hashFiles('.racket-version') }}-\
+            ${{ matrix.racket-catalogs-id }}"
 
       # We install each package directory as a linked package, and we
       # automatically fetch all the dependencies. We don't build the
