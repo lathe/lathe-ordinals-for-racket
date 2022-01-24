@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       package: lathe-ordinals
+      raco-install: >
+        raco pkg install --auto --update-deps --no-docs --skip-installed
+          --batch
     steps:
       - name: Initialize variables
         run: "true"
@@ -77,13 +80,13 @@ jobs:
       # index.
       #
       - name: Install `${{ matrix.package }}-lib` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-lib/"
+        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-lib/"
       - name: Install `${{ needs.vars.outputs.package }}-doc` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-doc/"
+        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-doc/"
       - name: Install `${{ needs.vars.outputs.package }}-test` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}-test/"
+        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}-test/"
       - name: Install `${{ needs.vars.outputs.package }}` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ needs.vars.outputs.package }}/"
+        run: ${{ needs.vars.outputs.raco-install }} --link "./${{ needs.vars.outputs.package }}/"
 
       # We recompile the collection (the single collection which all
       # these packages populate) and check that the package
