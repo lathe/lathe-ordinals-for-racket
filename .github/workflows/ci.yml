@@ -40,7 +40,7 @@ jobs:
             ~/.local/share/racket
           key: "\
             ${{ runner.os }}-\
-            ${{ hashFiles(\".racket-version\") }}-\
+            ${{ hashFiles('.racket-version') }}-\
             ${{ matrix.racket-catalogs-id }}"
       
       - name: Install Racket '${{ matrix.racket-version }}'
