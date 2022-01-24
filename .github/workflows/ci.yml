@@ -69,13 +69,14 @@ jobs:
       # We uninstall the packages if they're already installed. This
       # can happen if the GitHub Actions cache is already populated with
       # them.
-      - name: Uninstall `${{ needs.vars.outputs.package }}{,-test,-doc,-lib}`
-        run: |
-          raco pkg remove --skip-uninstalled --no-docs --batch \
-            ${{ needs.vars.outputs.package }} \
-            ${{ needs.vars.outputs.package }}-test \
-            ${{ needs.vars.outputs.package }}-doc \
-            ${{ needs.vars.outputs.package }}-lib
+      - name: Uninstall `${{ needs.vars.outputs.package }}`
+        run: raco pkg remove --skip-uninstalled --no-docs --batch ${{ needs.vars.outputs.package }} || true
+      - name: Uninstall `${{ needs.vars.outputs.package }}-test`
+        run: raco pkg remove --skip-uninstalled --no-docs --batch ${{ needs.vars.outputs.package }}-test || true
+      - name: Uninstall `${{ needs.vars.outputs.package }}-doc`
+        run: raco pkg remove --skip-uninstalled --no-docs --batch ${{ needs.vars.outputs.package }}-doc || true
+      - name: Uninstall `${{ needs.vars.outputs.package }}-lib`
+        run: raco pkg remove --skip-uninstalled --no-docs --batch ${{ needs.vars.outputs.package }}-lib || true
       
       # We install each package directory as a linked package, and we
       # automatically fetch all the dependencies. We don't build the
