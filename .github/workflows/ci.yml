@@ -23,8 +23,12 @@ jobs:
             racket-catalogs: |
               https://download.racket-lang.org/releases/8.3/catalog/,
               https://racksnaps.defn.io/built-snapshots/2022/01/23/catalog/
-          - package: lathe-ordinals
     steps:
+      - name: Declare variables
+        id: vars
+        outputs:
+          package: lathe-ordinals
+      
       - name: Checkout
         uses: actions/checkout@v2
       
@@ -70,28 +74,28 @@ jobs:
       # index.
       #
       - name: Install `${{ matrix.package }}-lib` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ matrix.package }}-lib/"
-      - name: Install `${{ matrix.package }}-doc` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ matrix.package }}-doc/"
-      - name: Install `${{ matrix.package }}-test` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ matrix.package }}-test/"
-      - name: Install `${{ matrix.package }}` and its dependencies
-        run: raco pkg install --auto --no-docs --batch --link "./${{ matrix.package }}/"
+        run: raco pkg install --auto --no-docs --batch --link "./${{ steps.vars.outputs.package }}-lib/"
+      - name: Install `${{ steps.vars.outputs.package }}-doc` and its dependencies
+        run: raco pkg install --auto --no-docs --batch --link "./${{ steps.vars.outputs.package }}-doc/"
+      - name: Install `${{ steps.vars.outputs.package }}-test` and its dependencies
+        run: raco pkg install --auto --no-docs --batch --link "./${{ steps.vars.outputs.package }}-test/"
+      - name: Install `${{ steps.vars.outputs.package }}` and its dependencies
+        run: raco pkg install --auto --no-docs --batch --link "./${{ steps.vars.outputs.package }}/"
 
       # We recompile the collection (the single collection which all
       # these packages populate) and check that the package
       # dependencies declared in each info.rkt are correct.
       - name: Recompile to check dependencies, and build documentation
-        run: raco setup --check-pkg-deps --unused-pkg-deps "${{ matrix.package }}"
+        run: raco setup --check-pkg-deps --unused-pkg-deps "${{ steps.vars.outputs.package }}"
 
       # We run tests according to the way the DrDr continuous testing
       # system does. This imitates the settings used by the Racket
       # package index at <https://pkgs.racket-lang.org/>.
-      - name: Test `${{ matrix.package }}-lib`
-        run: raco test --drdr --package "${{ matrix.package }}-lib"
-      - name: Test `${{ matrix.package }}-doc`
-        run: raco test --drdr --package "${{ matrix.package }}-doc"
-      - name: Test `${{ matrix.package }}-test`
-        run: raco test --drdr --package "${{ matrix.package }}-test"
-      - name: Test `${{ matrix.package }}`
-        run: raco test --drdr --package "${{ matrix.package }}"
+      - name: Test `${{ steps.vars.outputs.package }}-lib`
+        run: raco test --drdr --package "${{ steps.vars.outputs.package }}-lib"
+      - name: Test `${{ steps.vars.outputs.package }}-doc`
+        run: raco test --drdr --package "${{ steps.vars.outputs.package }}-doc"
+      - name: Test `${{ steps.vars.outputs.package }}-test`
+        run: raco test --drdr --package "${{ steps.vars.outputs.package }}-test"
+      - name: Test `${{ steps.vars.outputs.package }}`
+        run: raco test --drdr --package "${{ steps.vars.outputs.package }}"
