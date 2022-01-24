@@ -71,7 +71,7 @@ jobs:
       # them.
       - name: Uninstall `${{ needs.vars.outputs.package }}{,-test,-doc,-lib}`
         run: |
-          raco pkg remove --ignore-uninstalled --no-docs --batch \
+          raco pkg remove --skip-uninstalled --no-docs --batch \
             ${{ needs.vars.outputs.package }} \
             ${{ needs.vars.outputs.package }}-test \
             ${{ needs.vars.outputs.package }}-doc \
