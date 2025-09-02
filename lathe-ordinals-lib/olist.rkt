@@ -5,7 +5,7 @@
 ; A list-like data structure where the length and indexes can be any
 ; ordinal number less than epsilon zero.
 
-;   Copyright 2018 The Lathe Authors
+;   Copyright 2018, 2019, 2025 The Lathe Authors
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
 ;   you may not use this file except in compliance with the License.
@@ -134,7 +134,7 @@
 ; TODO: See if we should export this.
 (define/contract (olist-zero? v)
   (-> any/c boolean?)
-  (and (olist<=e0? v) (equal? 0 #/olist-length v)))
+  (and (olist<=e0? v) (equal-always? 0 #/olist-length v)))
 
 
 (struct-easy (olist-rep-zero)
@@ -160,8 +160,8 @@
   ])
 
 ; NOTE: We make this a procedure so that clients don't start to depend
-; on `(equal? olist-zero x)`. No two values returned by this procedure
-; are `equal?`. (TODO: Test this to make sure.)
+; on `(equal-always? olist-zero x)`. No two values returned by this
+; procedure are `equal?`. (TODO: Test this to make sure.)
 (define/contract (olist-zero)
   (-> olist<e0?)
   (olist #/olist-rep-zero))
@@ -187,7 +187,7 @@
         (error "Expected this to be an olist-rep-dynamic")
       #/w- new-start (onum-plus start 1)
       #/just #/list (fn #/index->element start)
-      #/if (equal? new-start stop) (olist-zero)
+      #/if (equal-always? new-start stop) (olist-zero)
       #/olist #/olist-rep-dynamic new-start stop index->element))
     
     (define (olist-rep-drop amount this)
@@ -373,7 +373,7 @@
       (error "Expected a to be an olist-rep"))
     (unless (olist-rep? b)
       (error "Expected b to be an olist-rep"))
-    (unless (equal? (olist-rep-length a) (olist-rep-length b))
+    (unless (equal-always? (olist-rep-length a) (olist-rep-length b))
       (error "Expected the lengths of a and b to be the same"))
     (unless (procedure? func)
       (error "Expected func to be a procedure")))
@@ -413,7 +413,7 @@
 
 (define/contract (olist-zip-map a b func)
   (->i ([a olist<=e0?] [b olist<=e0?] [func (-> any/c any/c any/c)])
-    #:pre (a b) (equal? (olist-length a) (olist-length b))
+    #:pre (a b) (equal-always? (olist-length a) (olist-length b))
     [_ olist<=e0?])
   (dissect a (olist a)
   #/dissect b (olist b)

@@ -4,7 +4,7 @@
 @;
 @; Ordinal number utilities.
 
-@;   Copyright 2018 The Lathe Authors
+@;   Copyright 2018, 2025 The Lathe Authors
 @;
 @;   Licensed under the Apache License, Version 2.0 (the "License");
 @;   you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ That's a lot of talk about set theory and mathematical foundations, but this lib
 
 This module provides data structures to represent the ordinal numbers of ZFC set theory that are less than or equal to epsilon zero. The ordinals less than epsilon zero are the earliest set of ordinals that contains omega and has full support for ordinal addition, multiplication, and exponentiation.
 
-All the ordinals of this library can be compared using `equal?`. Finite ordinals are represented using natural numbers (@racket[natural?]).
+All the ordinals of this library can be compared using `equal-always?` and `equal?`. Finite ordinals are represented using natural numbers (@racket[natural?]).
 
 
 @defproc[(onum<=e0? [v any/c]) boolean?]{

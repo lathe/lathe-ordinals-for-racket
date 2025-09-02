@@ -6,7 +6,7 @@
 ; ordinals up to epsilon zero (the first infinite ordinal which is a
 ; fixed point of exponentiation).
 
-;   Copyright 2018 The Lathe Authors
+;   Copyright 2018, 2019, 2025 The Lathe Authors
 ;
 ;   Licensed under the Apache License, Version 2.0 (the "License");
 ;   you may not use this file except in compliance with the License.
@@ -133,11 +133,11 @@
 
 (define/contract (0<onum<e0? v)
   (-> any/c boolean?)
-  (and (onum<e0? v) (not #/equal? 0 v)))
+  (and (onum<e0? v) (not #/equal-always? 0 v)))
 
 (define/contract (0<onum<=e0? v)
   (-> any/c boolean?)
-  (and (onum<=e0? v) (not #/equal? 0 v)))
+  (and (onum<=e0? v) (not #/equal-always? 0 v)))
 
 ; Returns whether the given value is recognized as an ordinal number
 ; by this library at all. Currently, these only go up to (and include)
@@ -261,7 +261,7 @@
 
 (define/contract (onum<=omega? v)
   (-> any/c boolean?)
-  (or (natural? v) (equal? v #/onum-omega)))
+  (or (natural? v) (equal-always? v #/onum-omega)))
 
 (define/contract (onum<omega? v)
   (-> any/c boolean?)
@@ -269,11 +269,11 @@
 
 (define/contract (0<onum<=omega? v)
   (-> any/c boolean?)
-  (and (onum<=omega? v) (not #/equal? 0 v)))
+  (and (onum<=omega? v) (not #/equal-always? 0 v)))
 
 (define/contract (0<onum<omega? v)
   (-> any/c boolean?)
-  (and (onum<omega? v) (not #/equal? 0 v)))
+  (and (onum<omega? v) (not #/equal-always? 0 v)))
 
 ; This is increment by way of addition on the left. We're finding
 ; `(onum-plus 1 n)`.
@@ -316,7 +316,7 @@
   (onum-plus-list ns))
 
 ; This is decrement by way of left subtraction. We're finding the
-; value `result` such that `(equal? (onum-plus 1 result) n)`,
+; value `result` such that `(equal-always? (onum-plus 1 result) n)`,
 ; if it exists. It exists as long as `n` is 1 or greater.
 (define/contract (onum-drop1 n)
   (-> onum<=e0? #/maybe/c onum<=e0?)
@@ -325,8 +325,8 @@
     (just n)))
 
 ; This is left subtraction. We're finding the value `result` such that
-; `(equal? (onum-plus amount result) n)`, if it exists. It exists as
-; long as `amount` is less than or equal to `n`.
+; `(equal-always? (onum-plus amount result) n)`, if it exists. It
+; exists as long as `amount` is less than or equal to `n`.
 (define/contract (onum-drop amount n)
   (-> onum<=e0? onum<=e0? #/maybe/c onum<=e0?)
   (mat n (onum-e0) (just #/mat amount (onum-e0) 0 (onum-e0))
@@ -390,7 +390,8 @@
 ;
 ; This is left division. We're finding the value
 ; `(list quotient remainder)` such that `(onum<? remainder amount)`
-; and `(equal? (onum-plus (onum-times amount quotient) remainder) n)`,
+; and
+; `(equal-always? (onum-plus (onum-times amount quotient) remainder) n)`,
 ; if it exists. It exists as long as `amount` is nonzero.
 (define/contract (onum-untimes amount n)
   (-> onum<=e0? onum<=e0? #/maybe/c #/list/c onum<=e0? onum<e0?)
@@ -417,7 +418,7 @@
       (just #/list q r))
   
   #/dissect
-    (if (equal? amount-power n-power)
+    (if (equal-always? amount-power n-power)
       (w- q-first-1 (quotient n-coefficient amount-coefficient)
       #/dissect (nat->maybe q-first-1) (just q-first-2)
       #/list q-first-1 q-first-2)
@@ -510,7 +511,7 @@
 ; `onum-drop` is related to `onum-plus`. This operation would find
 ; the value `(list exponent factor term)` that solves
 ;
-;   (equal? n
+;   (equal-always? n
 ;     (onum-plus (onum-times (onum-pow amount exponent) factor) term))
 ;
 ; for a given `amount` and a given `n`, such that
